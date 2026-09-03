@@ -46,14 +46,49 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - LICENSE (Apache-2.0, copied template), README, .gitignore, .prettierrc in place.
 - Committed + pushed to origin (see `git log`).
 
-## What's LEFT (publishing only)
+## What's LEFT (publishing only) — DONE 2026-09-03
 
-2026-09-03 status: tag `v0.1.0` pushed, GitHub release published (workflow
-`Publish package` fired). First CI run failed at `npm test` — CI runners have no
-`zg`; fixed by an `npm install -g @zvec/zvec-grep@0.2.1` step in
-`.github/workflows/publish.yml` (deliberately global, not a dependency: the
-extension requires a pre-existing global `zg`, and a dep would shadow that).
-Re-running now; the eventual `npm publish` will still fail unless one of:
+Published: `@luminascale/pi-zvec-grep@0.1.0` on npm (`latest` tag, 20 files,
+~22.7kB tarball, shasum `e2e655f1…af224d56` — verified against the registry).
+Tag `v0.1.0` points at `9fa9a3c` (code = `394459e`; diff is CI fix + this
+handoff), and the release-run pipeline is verified green end-to-end.
+
+Publishing history (2026-09-03):
+1. Tag + release fired the workflow; run 1 failed at `npm test` — CI runners
+   have no `zg`. Fixed: `npm install -g @zvec/zvec-grep@0.2.1` step in
+   `.github/workflows/publish.yml` (deliberately global, not a dependency:
+   the extension requires a pre-existing global `zg`). Run 2 still used the
+   *old* workflow def (release events resolve the workflow from the tagged
+   commit) → had to move the tag to the fix commit. Run 3: tests green,
+   tarball clean, failed only at `npm publish` (no trusted publisher yet).
+2. v0.1.0 bootstrapped **manually** from a local terminal
+   (`npm publish --access public`, account + 2FA one-time auth in the
+   interactive `npm` CLI — note npm mangles auth URLs in non-interactive
+   shells, so an interactive terminal is required). Per the npm docs,
+   trusted-publisher records live on the package page, which requires the
+   package to exist first — that's why the workflow was written with the
+   already-published guard.
+3. Release re-published after the manual publish → workflow finished green
+   via the already-published no-op guard (full CI path verified).
+
+Remaining (optional, for future releases):
+1. **npm trusted publishing (OIDC)** — UI-only on the npmjs.com package
+   page → access: add trusted publisher GitHub Actions, user
+   `MikkelKappelPersson`, repo `pi-zvec-grep`, default branch, workflow
+   `publish.yml`. Until then: bootstrap each version manually from a local
+   terminal (interactive), then push tag + release for the green run.
+   (`npm trust` also exists but needs interactive 2FA.)
+2. Optional: add the repo to pi-mcp-adapter's known-servers.
+3. Optional cosmetic: add `files: ["index.ts", "src"]` to package.json at the
+   next real version to drop the dev-only `test/` files from the tarball.
+   (Chose NOT to add `.npmignore`: it would replace the working `.gitignore`
+   fallback with a duplicate rule list; parity with pi-shepherd is
+   intentional — its `npm warn gitignore-fallback` line is likewise benign.)
+
+Note: the `npm publish` step will succeed in CI once OIDC is configured;
+no workflow change needed. The already-published guard makes re-runs safe.
+
+### Old TODOs (resolved above, kept for the record)
 
 1. **npm scope ownership** — `@luminascale` must exist on npm owned by your account.
    If already published under your account, skip. For a brand-new package name, GitHub
