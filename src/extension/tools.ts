@@ -56,6 +56,16 @@ const statusParams = Type.Object({
 	root: Type.Optional(Type.String({ description: 'Workspace root to check; defaults to the current working directory' })),
 });
 
+/** Cap a call-line display snippet so long args do not stretch the row. */
+const short = (s: string, max = 60): string => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+
+/** Call-row renderer: reuse the previous Text component (built-in convention). */
+function callRow(context: { lastComponent?: unknown }, content: string): Text {
+	const text = (context.lastComponent as Text | undefined) ?? new Text('', 0, 0);
+	text.setText(content);
+	return text;
+}
+
 /** Search tool params as the LLM sees them (root optional, cwd fallback). */
 export type SearchToolInput = ZvecSearchQueryParams & { root?: string };
 export type StatusToolInput = { root?: string };
@@ -88,10 +98,18 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 				details: {},
 			};
 		},
-		renderCall(args, theme) {
+		renderCall(args, theme, context) {
 			const a = args as SearchToolInput;
+			const groupCount = (a.query ? 1 : 0) + (a.queries?.length ?? 0) + (a.fts?.length ?? 0) + (a.vector?.length ?? 0);
 			const query = a.query ?? a.queries?.[0] ?? a.fts?.[0] ?? a.vector?.[0] ?? '';
-			return new Text(`  ${a.root ? `${theme.fg('dim', a.root)}  ` : ''}${theme.fg('text', query)}`, 0);
+			let line = theme.fg('toolTitle', theme.bold('zvec_search'));
+			if (query) line += ` ${theme.fg('accent', `"${short(query)}"`)}`;
+			if (groupCount > 1) line += ` ${theme.fg('dim', `+${groupCount - 1} more`)}`;
+			if (a.root) line += ` ${theme.fg('toolOutput', `in ${a.root}`)}`;
+			const filters = [...(a.fileTypes ?? []), ...(a.excludedFileTypes ?? []).map((f) => `!${f}`), ...(a.globs ?? []), ...(a.symbolTypes ?? [])];
+			if (filters.length > 0) line += ` ${theme.fg('dim', `(${filters.join(', ')})`)}`;
+			if (a.limit !== undefined) line += ` ${theme.fg('dim', `limit ${a.limit}`)}`;
+			return callRow(context, line);
 		},
 	});
 
@@ -124,12 +142,14 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 				details: {},
 			};
 		},
-		renderCall(args, theme) {
+		renderCall(args, theme, context) {
 			const a = args as ZvecIndexParams;
-			return new Text(
-				`  ${theme.fg('text', `${a.mode ?? 'index'} ${a.root}`)}${a.embedding ? theme.fg('dim', ` · ${a.embedding}`) : ''}`,
-				0,
-			);
+			const mode = a.mode ?? 'index';
+			let line = theme.fg('toolTitle', theme.bold('zvec_index'));
+			if (mode !== 'index') line += ` ${theme.fg(mode === 'drop' ? 'error' : 'warning', mode)}`;
+			line += ` ${theme.fg('toolOutput', a.root)}`;
+			if (a.embedding) line += ` ${theme.fg('dim', `· ${a.embedding}`)}`;
+			return callRow(context, line);
 		},
 	});
 
@@ -154,9 +174,9 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 				details: {},
 			};
 		},
-		renderCall(args, theme) {
+		renderCall(args, theme, context) {
 			const root = (args as StatusToolInput).root;
-			return new Text(`  ${theme.fg('text', root ?? '(cwd)')}`, 0);
+			return callRow(context, `${theme.fg('toolTitle', theme.bold('zvec_status'))} ${theme.fg('toolOutput', root ?? '(cwd)')}`);
 		},
 	});
 }
