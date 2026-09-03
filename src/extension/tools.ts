@@ -8,8 +8,10 @@ import { buildIndexArgs, type ZvecIndexParams } from '../core/indexing.ts';
 import { buildQueryArgs, type ZvecSearchQueryParams } from '../core/queries.ts';
 import {
 	hitHeadline,
+	parseIndexOutput,
 	parseSearchOutput,
 	parseStatusVerdict,
+	type ZgIndexSummary,
 	type ZgSearchSummary,
 	type ZgStatusVerdict,
 } from '../core/format.ts';
@@ -137,6 +139,23 @@ function errorRow(raw: string, theme: ThemeFg, expanded: boolean): Text {
 	return new Text(text, 0, 0);
 }
 
+interface IndexRenderState {
+	startedAt?: number;
+	interval?: ReturnType<typeof setInterval>;
+}
+
+/** Styled `zg index` finish block for expanded rows. */
+function styledIndexOutput(raw: string, theme: ThemeFg): string {
+	return raw
+		.split('\n')
+		.map((l) => {
+			if (l.startsWith('tip\t')) return theme.fg('dim', l);
+			if (l.startsWith('Workspace index')) return theme.fg('accent', l);
+			return theme.fg('toolOutput', l);
+		})
+		.join('\n');
+}
+
 /** Search tool params as the LLM sees them (root optional, cwd fallback). */
 export type SearchToolInput = ZvecSearchQueryParams & { root?: string };
 export type StatusToolInput = { root?: string };
@@ -232,7 +251,7 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 			}
 			return {
 				content: [{ type: 'text' as const, text: clip(stdout || stderr || `zvec index finished for ${resolvedRoot}`) }],
-				details: {},
+				details: parseIndexOutput(stdout) ? { indexSummary: parseIndexOutput(stdout) } : {},
 			};
 		},
 		renderCall(args, theme, context) {
@@ -243,6 +262,43 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 			line += ` ${theme.fg('toolOutput', a.root)}`;
 			if (a.embedding) line += ` ${theme.fg('dim', `· ${a.embedding}`)}`;
 			return callRow(context, line);
+		},
+		renderResult(result: RenderResult, options: { expanded: boolean; isPartial: boolean }, theme: ThemeFg, context: { isError?: boolean; state?: unknown; invalidate(): void }) {
+			const state = (context.state ?? {}) as IndexRenderState;
+			if (options.isPartial) {
+				// Live elapsed timer while zg runs (bash-renderer pattern).
+				state.startedAt ??= Date.now();
+				state.interval ??= setInterval(() => context.invalidate(), 1000);
+				const secs = Math.floor((Date.now() - state.startedAt) / 1000);
+				return new Text(theme.fg('warning', `indexing… ${secs}s`), 0, 0);
+			}
+			if (state.interval) {
+				clearInterval(state.interval);
+				state.interval = undefined;
+			}
+			const raw = resultText(result);
+			if (context.isError || raw.trimStart().startsWith('Error:')) {
+				return errorRow(raw, theme, options.expanded);
+			}
+			const summary = (result.details as { indexSummary?: ZgIndexSummary } | undefined)?.indexSummary;
+			if (options.expanded) {
+				return new Text(theme.fg('toolOutput', summary ? styledIndexOutput(raw, theme) : raw), 0, 0);
+			}
+			if (summary) {
+				const changed = summary.added + summary.modified + summary.deleted;
+				let line = theme.fg('success', `✓ index updated · ${summary.scanned} files · ${summary.entities ?? '–'} entities · ${summary.duration ?? '–'}`);
+				line += theme.fg('muted', expandHint());
+				if (changed > 0) {
+					const bits = [
+						summary.added > 0 ? `${summary.added} added` : '',
+						summary.modified > 0 ? `${summary.modified} modified` : '',
+						summary.deleted > 0 ? `${summary.deleted} deleted` : '',
+					].filter(Boolean);
+					line += '\n' + theme.fg('dim', `   ${bits.join(' · ')}`);
+				}
+				return new Text(line, 0, 0);
+			}
+			return previewRow(raw, theme);
 		},
 	});
 

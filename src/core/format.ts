@@ -112,6 +112,35 @@ export function parseSearchOutput(stdout: string): ZgSearchSummary | undefined {
 	return { groups, totalHits: total, fileCount: files.size, top, hasStale };
 }
 
+/** Parsed `zg index` finish block (`Workspace index` section). */
+export interface ZgIndexSummary {
+	scanned: number;
+	added: number;
+	modified: number;
+	unchanged: number;
+	deleted: number;
+	entities?: number;
+	/** e.g. "2s" — zg prints `duration 2s (1735ms)`. */
+	duration?: string;
+}
+
+/** Parse the `zg index` finish block; undefined on unrecognized output (e.g. drop). */
+export function parseIndexOutput(stdout: string): ZgIndexSummary | undefined {
+	const files = stdout.match(/^files\t(\d+) scanned, (\d+) added, (\d+) modified, \d+ retried, (\d+) unchanged, (\d+) deleted, \d+ failed$/m);
+	if (!files) return undefined;
+	const entities = stdout.match(/^entities\t(\d+)$/m);
+	const duration = stdout.match(/^duration\t(\S+)(?: \(\d+ms\))?/m);
+	return {
+		scanned: Number(files[1]),
+		added: Number(files[2]),
+		modified: Number(files[3]),
+		unchanged: Number(files[4]),
+		deleted: Number(files[5]),
+		entities: entities ? Number(entities[1]) : undefined,
+		duration: duration ? duration[1] : undefined,
+	};
+}
+
 /** One-line headline for a hit: "FILE:lines — heading|symbol|preview". */
 export function hitHeadline(hit: ZgHit, maxPreview = 48): string {
 	const file = hit.file ?? '';

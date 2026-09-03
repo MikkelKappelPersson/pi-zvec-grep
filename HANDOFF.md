@@ -64,13 +64,16 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
     matchedBy/metadata dim, truncation warning); errors: head line in `error` color, rest on expand.
   - `zvec_status.renderResult` — collapsed: color-coded verdict (success/warning/muted-dim);
     expanded: full toolOutput block. Missing index renders as muted verdict, not error.
+  - `zvec_index.renderResult` — live elapsed timer while partial (bash-renderer
+    startedAt/setInterval/invalidate pattern), then `✓ index updated · N files · M entities · Xs`
+    with the added/modified/deleted delta dimmed; expanded: styled finish block.
+    `parseIndexOutput` in core/format.ts feeds it (drop-mode output → undefined → dim preview).
   - `keyHint('app.tools.expand')` is the expand hint (deferred call — module import must not touch
     pi's theme, which breaks the hermetic node test loader).
   - Structured data rides in `details` (`summary` / `verdict`) so session state survives re-renders
     and branching; renderers also re-parse `content` text as fallback for old sessions.
-- Remaining (known good next steps): zvec_index live elapsed timer (bash-renderer
-  startedAt/interval/invalidate pattern), path shortening in call lines (built-in
-  `~/…` convention), parse `zg index` output for a one-line finish summary.
+- Remaining (known good next steps): path shortening in call lines (built-in
+  `~/…` convention).
 
 ## What's LEFT (publishing only) — DONE 2026-09-03
 

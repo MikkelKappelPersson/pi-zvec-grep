@@ -5,7 +5,7 @@
  * Fixtures are real captured `zg query` / `zg status` outputs (zg 0.2.1).
  * Contract: parsers are forgiving — unrecognized input yields undefined, never throws.
  */
-import { parseSearchOutput, parseStatusVerdict, hitHeadline } from '../src/core/format.ts';
+import { parseSearchOutput, parseStatusVerdict, parseIndexOutput, hitHeadline } from '../src/core/format.ts';
 import { createReporter } from './helpers/test-utils.mjs';
 
 const { assert: check, done } = createReporter();
@@ -151,5 +151,23 @@ check(noErr?.kind === 'missing', 'zg no-index error block counts as missing');
 
 check(parseStatusVerdict('brand new unknown format') === undefined, 'unknown status format → undefined (raw fallback)');
 check(parseStatusVerdict('(no output)') === undefined, 'no-output text → undefined');
+
+// --- parseIndexOutput
+const INDEX_OUT = `tip\tDefault indexing skips common noise. For large or remote-embedding indexes, inspect this long-lived workspace and choose focused -g/--glob and -t/--type filters.
+Workspace index
+files\t20 scanned, 2 added, 3 modified, 0 retried, 15 unchanged, 0 deleted, 0 failed
+entities\t36
+duration\t2s (1735ms)
+roots\t/home/mikkelkp/.pi/agent/extensions/pi-zvec-grep`;
+
+const ix = parseIndexOutput(INDEX_OUT);
+check(ix !== undefined, 'index finish block parses');
+check(ix.scanned === 20 && ix.added === 2 && ix.modified === 3 && ix.unchanged === 15 && ix.deleted === 0, 'files counters parsed');
+check(ix.entities === 36, 'entities parsed');
+check(ix.duration === '2s', 'duration parsed (ms parenthetical dropped)');
+
+const ixDrop = parseIndexOutput('Index removed for /tmp/ws');
+check(ixDrop === undefined, 'drop output → undefined (renderer falls back)');
+check(parseIndexOutput('') === undefined, 'empty index output → undefined');
 
 done();
