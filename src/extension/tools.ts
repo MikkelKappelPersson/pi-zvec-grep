@@ -175,7 +175,7 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 			`Returns ranked hits with file, line range, symbols, and matching source. ${SEARCH_GUIDANCE}`,
 		promptSnippet: 'Semantic + exact hybrid search over the indexed workspace (local zvec-grep)',
 		promptGuidelines: [
-			'Use zvec_search for meaning-based or location-unknown workspace questions; keep bash rg for exact strings, regex, counts, and file lists.',
+			'Use zvec_search for meaning-based or location-unknown workspace questions; keep bash grep for exact strings, regex, counts, and file lists.',
 		],
 		parameters: searchParams,
 		async execute(_toolCallId: string, params: SearchToolInput, signal: AbortSignal | undefined, _onUpdate: unknown, ctx: ExtensionContext) {
