@@ -76,9 +76,9 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - Remaining (known good next steps): path shortening in call lines (built-in
   `~/…` convention).
 
-## Publishing state (as of v0.2.0, 2026-09-03)
+## Publishing state (as of v0.2.1, 2026-09-03)
 
-Live on npm (`latest` tag): **0.2.0** (10 files, 48.6kB, provenance signed from
+Live on npm (`latest` tag): **0.2.1** (10 files, provenance signed from
 GitHub Actions). CI publish path is fully verified end-to-end:
 `git push` → `git tag vX.Y.Z` → `git push origin <tag>` → `gh release create <tag>` →
 the `publish.yml` release workflow builds from the tag, runs `npm test` + installs a
@@ -102,8 +102,11 @@ Publishing history (2026-09-03):
    Actions, user `MikkelKappelPersson`, repo `pi-zvec-grep`, workflow `publish.yml`).
    Verified by v0.1.1 (9 files) shipping purely through CI with `npm notice publish
    Signed provenance statement ... Provenance statement published to transparency log`.
-3. v0.2.0 (this release, 10 files) shipped the same way: tag → release → CI green with
+3. v0.2.0 (10 files) shipped the same way: tag → release → CI green with
    provenance. No manual publish used.
+4. v0.2.1 (10 files, 2026-09-03): single /zg command with subcommand dispatch
+   (rebuild/drop added to the slash surface; /zg-index + /zg-status dropped).
+   Same tag → release → CI green path, clean run in 43s.
 
 Remaining (optional for future releases):
 1. Optional: add the repo to pi-mcp-adapter's known-servers.
