@@ -1,6 +1,6 @@
 {
   "name": "@luminascale/pi-zvec-grep",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "🔍 zvec-grep's local-first hybrid (semantic + exact) search as native pi tools",
   "license": "Apache-2.0",
