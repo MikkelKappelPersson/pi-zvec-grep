@@ -25,11 +25,13 @@ try {
 	assert.equal(DEFAULT_SETTINGS.settingsScope, 'user');
 	assert.equal(loadSettings().defaultLimit, 7, 'missing defaultLimit setting defaults to 7');
 	assert.equal(loadSettings().settingsScope, 'user', 'settings scope defaults to user');
+	assert.equal(loadSettings().autoIndex, false, 'autoIndex defaults to off');
 
 	// --- user layer persistence (full object, incl. scope) ------------------
 	const user = { ...DEFAULT_SETTINGS, defaultLimit: 10 };
 	saveSettings(user, 'user');
 	assert.equal(loadSettings().defaultLimit, 10, 'changed defaultLimit persists');
+	assert.equal(loadSettings().autoIndex, false, 'autoIndex stays off through user-layer writes');
 	const rawUser = JSON.parse(fs.readFileSync(userConfigFile(), 'utf8'));
 	assert.equal(rawUser.defaultLimit, 10, 'user file holds the full object');
 	assert.equal(rawUser.settingsScope, 'user', 'user file always carries settingsScope');
@@ -83,6 +85,28 @@ try {
 	assert.equal(loadSettings(cwd).defaultLimit, DEFAULT_SETTINGS.defaultLimit, 'out-of-range defaultLimit -> default (validField rejects)');
 	fs.writeFileSync(projFile, 'not json');
 	assert.equal(loadSettings(cwd).defaultLimit, DEFAULT_SETTINGS.defaultLimit, 'malformed project file -> user layer');
+
+	// --- autoIndex: layer contract + scope semantics ------------------------
+	saveSettings({ ...DEFAULT_SETTINGS, defaultLimit: 10, settingsScope: 'user', autoIndex: true }, 'user');
+	assert.equal(loadSettings().autoIndex, true, 'user layer: autoIndex on');
+	assert.equal(loadSettings(cwd).autoIndex, true, 'with no project delta, autoIndex comes from the user layer');
+	saveSettings({ ...DEFAULT_SETTINGS, defaultLimit: 10, settingsScope: 'project', autoIndex: true }, 'user');
+	result = saveSettings({ ...loadSettings(cwd), autoIndex: false }, 'project', cwd);
+	assert.equal(result.created, false, 'autoIndex project save reuses the existing project file');
+	assert.deepEqual(JSON.parse(fs.readFileSync(projFile, 'utf8')), { autoIndex: false }, 'autoIndex differing from user value enters the project delta');
+	assert.equal(loadSettings(cwd).autoIndex, false, 'project delta turns autoIndex off in project scope');
+	assert.equal(loadSettings().autoIndex, true, 'project delta does not leak into the user layer');
+	saveSettings({ ...DEFAULT_SETTINGS, defaultLimit: 10, settingsScope: 'project', autoIndex: true }, 'user');
+	saveSettings({ ...loadSettings(cwd), autoIndex: true }, 'project', cwd);
+	assert.deepEqual(JSON.parse(fs.readFileSync(projFile, 'utf8')), {}, 'autoIndex equal to user value leaves an empty delta');
+	// hand-written non-boolean, like defaultLimit: only true/false pass validation
+	fs.writeFileSync(projFile, JSON.stringify({ autoIndex: 'yes' }));
+	assert.equal(loadSettings(cwd).autoIndex, true, 'non-boolean autoIndex falls back to the user layer');
+	// leave autoIndex off, keeping the project scope pointer, for the sections below
+	saveSettings({ ...DEFAULT_SETTINGS, defaultLimit: 10, settingsScope: 'project', autoIndex: false }, 'user');
+	saveSettings({ ...loadSettings(cwd), autoIndex: false }, 'project', cwd);
+	assert.equal(loadSettings(cwd).autoIndex, false, 'autoIndex reset to off in both layers');
+	assert.equal(loadSettings(cwd).settingsScope, 'project', 'scope pointer left as project for the sections below');
 
 	// --- loadProjectDelta mirrors the effective project layer -----------------
 	fs.writeFileSync(projFile, JSON.stringify({ defaultLimit: 30 }));

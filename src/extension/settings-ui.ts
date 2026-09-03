@@ -33,6 +33,7 @@ import {
 
 const DEFAULT_LIMIT_CHOICES = [3, 5, 7, 10, 15, 20, 30, 50];
 const DEFAULT_LIMIT_DISPLAY = (n: number) => String(n);
+const AUTO_INDEX_DISPLAY = (b: boolean) => (b ? 'on' : 'off');
 
 /** Translate a settings change (string value from the list) back into state. */
 function applyValue(settings: ZvecGrepSettings, id: string, value: string): ZvecGrepSettings {
@@ -46,6 +47,10 @@ function applyValue(settings: ZvecGrepSettings, id: string, value: string): Zvec
 			if (Number.isFinite(n) && n >= 1 && n <= 50) next.defaultLimit = n;
 			break;
 		}
+		case 'autoIndex':
+			// The menu cycles the two display strings; map them back to on/off.
+			next.autoIndex = value === 'on';
+			break;
 	}
 	return next;
 }
@@ -79,6 +84,16 @@ export async function openSettings(ctx: ExtensionCommandContext): Promise<void> 
 					description: 'Max hits per search group (1-50) when a search passes no explicit limit. An explicit tool-call limit always wins.',
 					currentValue: DEFAULT_LIMIT_DISPLAY(settings.defaultLimit),
 					values: DEFAULT_LIMIT_CHOICES.map(DEFAULT_LIMIT_DISPLAY),
+				},
+				{
+					id: 'autoIndex',
+					label: 'Auto index on start',
+					description:
+						'On every session start in this workspace (or the user default when scope is "user"), ' +
+						'check the index with `zg status --check-ready` and, when it is missing or stale, build/update it in the background. ' +
+						'Off by default — the first index build can take a while and may download the embedding model.',
+					currentValue: AUTO_INDEX_DISPLAY(settings.autoIndex),
+					values: ['on', 'off'],
 				},
 			];
 

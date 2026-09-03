@@ -27,7 +27,7 @@ export type ConfigScope = 'user' | 'project';
  * Overridable config fields — every field except `settingsScope`, which lives
  * only in the user layer (a project file cannot select its own scope).
  */
-const OVERRIDABLE_FIELDS = ['defaultLimit'] as const;
+const OVERRIDABLE_FIELDS = ['defaultLimit', 'autoIndex'] as const;
 type OverridableField = (typeof OVERRIDABLE_FIELDS)[number];
 
 export interface ZvecGrepSettings {
@@ -35,11 +35,19 @@ export interface ZvecGrepSettings {
 	settingsScope: ConfigScope;
 	/** Default max items per search group (1..50) when a search passes no explicit limit. */
 	defaultLimit: number;
+	/**
+	 * On every session start, run `zg status --check-ready` in the working
+	 * directory; when the index is missing or stale, build/update it in the
+	 * background (fire-and-forget). Off by default — the first index build can
+	 * take a while and may download the local embedding model.
+	 */
+	autoIndex: boolean;
 }
 
 export const DEFAULT_SETTINGS: ZvecGrepSettings = {
 	settingsScope: 'user',
 	defaultLimit: 7,
+	autoIndex: false,
 };
 
 export function userConfigFile(): string {
@@ -78,6 +86,8 @@ function validField(field: OverridableField, raw: Record<string, unknown>): unkn
 	switch (field) {
 		case 'defaultLimit':
 			return typeof raw[field] === 'number' ? validDefaultLimit(raw[field]) : undefined;
+		case 'autoIndex':
+			return typeof raw[field] === 'boolean' ? raw[field] : undefined;
 	}
 }
 

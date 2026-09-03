@@ -4,7 +4,13 @@
  * Written into a temp bin dir and prepended to PATH via the fake pi.exec.
  * Behavior is controlled by env on the harness side:
  *   ZFAKE_STATE_DIR  — receives <cmd>.json with { cwd, args } per invocation
- *   ZFAKE_MODE       — "missing-index": query/status fail like a real no-index workspace
+ *   ZFAKE_MODE       — status behavior drives the guard; default and
+ *                      "missing-index" fail like a no-index workspace,
+ *                      "ready" succeeds. "stale-slow": status fails and the
+ *                      index subcommand sleeps (ZFAKE_INDEX_SLEEP seconds)
+ *                      before completing — models a multi-minute real build.
+ *                      "fail-index": status fails and the index subcommand
+ *                      exits 1 after recording.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -27,11 +33,19 @@ if (cmd === 'query') {
   record('query');
   console.log('FAKE-QUERY args: ' + rest.join(' '));
 } else if (cmd === 'index') {
+  if (process.env.ZFAKE_MODE === 'stale-slow') {
+    const ms = Number(process.env.ZFAKE_INDEX_SLEEP || 0) * 1000;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  }
   record('index');
+  if (process.env.ZFAKE_MODE === 'fail-index') {
+    process.stderr.write('FAKE-INDEX exploded\\n');
+    process.exit(1);
+  }
   console.log('FAKE-INDEX args: ' + rest.join(' ') + ' cwd=' + process.cwd());
 } else if (cmd === 'status') {
   record('status');
-  if (process.env.ZFAKE_MODE === 'missing-index') {
+  if (process.env.ZFAKE_MODE !== 'ready') {
     console.log('No index for ' + process.cwd());
     process.exit(1);
   }
@@ -55,6 +69,12 @@ export function createFakeZg(root) {
 		readState: (name) => {
 			const file = path.join(stateDir, `${name}.json`);
 			return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined;
+		},
+		resetState: () => {
+			if (!fs.existsSync(stateDir)) return;
+			for (const f of fs.readdirSync(stateDir)) {
+				if (f.endsWith('.json')) fs.rmSync(path.join(stateDir, f));
+			}
 		},
 		clean: () => fs.rmSync(binDir, { recursive: true, force: true }),
 	};

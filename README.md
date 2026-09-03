@@ -47,7 +47,7 @@ One slash command, `/zg`, dispatches on a subcommand. All take an optional `[pat
 | `/zg rebuild [path]` | Recreate the index from scratch. |
 | `/zg drop [path]` | **Permanently delete the workspace index** (runs with `--yes`; no prompt). |
 | `/zg status [path]` | Show index presence, coverage, freshness, and the suggested next action. |
-| `/zg settings` | Open the settings menu (interactive TUI): settings scope + default search limit. |
+| `/zg settings` | Open the settings menu (interactive TUI): settings scope, default search limit, auto index on start. |
 | `/zg help` | Print usage. |
 
 ## Settings
@@ -61,6 +61,7 @@ One slash command, `/zg`, dispatches on a subcommand. All take an optional `[pat
 
 - **Settings scope** (`user` \| `project`): where the menu reads its values from and writes its edits to. User scope → edits go to the user file; project scope → edits go to the project delta. Switching to `project` when the file is missing creates it (with a `Config created at …` notification).
 - **Default search limit** (1–50): the `--limit` used by `zvec_search` when the tool call passes no explicit `limit`. An explicit tool-call limit always wins.
+- **Auto index on start** (off by default): on every `session_start`, the hook runs `zg status --check-ready` in the working directory and, when the index is missing or stale, builds/updates it in the background (fire-and-forget; never blocks startup or the lifecycle hook). Healthy indices cost one fast guard call per start; only a missing/stale index triggers a build. Enabled in the user file for all workspaces, or in the project delta for one workspace. The first build can take a while and may download the local embedding model — hence off by default.
 
 Config files are read fresh on every use (mtime-cached), so hand edits take effect immediately.
 
@@ -68,7 +69,8 @@ Config files are read fresh on every use (mtime-cached), so hand edits take effe
 // user: ~/.pi/agent/pi-zvec-grep/config.json
 {
 	"settingsScope": "user",
-	"defaultLimit": 7
+	"defaultLimit": 7,
+	"autoIndex": false
 }
 
 // project: .zvec-grep/config.json (delta — only fields that differ from user)
@@ -115,7 +117,7 @@ src/core/
   workspace.ts           # normalizeRoot + clip
   zg.ts                  # pi.exec wrapper around the global `zg`
 src/extension/
-  tools.ts               # the pi tool + command surface
+  tools.ts               # the pi tool + command surface + auto-index session hook
   config.ts              # two-layer settings (user file + project delta)
   settings-ui.ts         # /zg settings menu (SettingsList)
 test/
@@ -139,6 +141,7 @@ npm run queries:test    # buildQueryArgs (pure)
 npm run indexing:test   # buildIndexArgs (pure)
 npm run errors:test     # normalizeRoot/clip/error shaping (pure)
 npm run settings:test   # config layers: scope/delta/write semantics (pure + tool wiring)
+npm run autoindex:test  # session-start auto-index hook: guard, fire-and-forget, in-flight (fake)
 ```
 
 > `verify-cli.mjs` shells out to the real `zg` and will FAIL if `@zvec/zvec-grep` is not installed — install it first, or rely on the hermetic suites for CI without it.

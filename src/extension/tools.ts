@@ -473,6 +473,55 @@ function zgHandler(exec: (command: string, args: string[], options: { cwd?: stri
 }
 
 /**
+ * Auto-index on session start (setting: `autoIndex`, off by default).
+ *
+ * Fires on every `session_start` reason (deliberately no reason filter): the
+ * first step is `zg status --check-ready`, and the index is only built or
+ * updated when that guard fails, so the steady-state cost on a healthy index
+ * is one fast status call. The build runs fire-and-forget — never awaited
+ * and never throwing into the lifecycle hook — and failures end up as
+ * `ui.notify` only. An in-flight per-root set prevents a concurrent build
+ * from being restarted while one is running. The hook is always registered;
+ * the setting is read fresh on each start, so the menu toggle takes effect
+ * from the next session start.
+ */
+export function registerAutoIndex(pi: ExtensionAPI): void {
+	const inflight = new Set<string>();
+	const notify = (ctx: { ui?: { notify?: (message: string, type?: string) => void } }, message: string, type: 'info' | 'error'): void => {
+		try {
+			ctx.ui?.notify?.(message, type);
+		} catch {
+			// A notification failure must never escape into the lifecycle hook.
+		}
+	};
+	pi.on('session_start', (_event, ctx) => {
+		const cwd = ctx.cwd;
+		if (!loadSettings(cwd).autoIndex) return;
+		const root = normalizeRoot(undefined, cwd);
+		if (inflight.has(root)) return;
+		inflight.add(root);
+		void (async () => {
+			try {
+				const check = await pi.exec('zg', ['status', '--check-ready'], { cwd: root, timeout: ZG_STATUS_TIMEOUT_MS });
+				if (check.code === 0) return; // index ready: nothing to do
+				notify(ctx, `zvec: index missing or stale — building in background…`, 'info');
+				const result = await pi.exec('zg', ['index', root], { cwd: root, timeout: ZG_INDEX_TIMEOUT_MS });
+				if (result.code !== 0) {
+					const detail = (result.stderr || result.stdout || `exit ${result.code}`).split('\n')[0];
+					notify(ctx, `zvec: auto index failed: ${detail}`, 'error');
+					return;
+				}
+				notify(ctx, `zvec: index updated for ${root}`, 'info');
+			} catch {
+				notify(ctx, 'zvec: auto index failed (zg could not be run)', 'error');
+			} finally {
+				inflight.delete(root);
+			}
+		})();
+	});
+}
+
+/**
  * Register the /zg command: one slash command with subcommand dispatch
  * (index | rebuild | drop | status | settings | help) and argument completion.
  */

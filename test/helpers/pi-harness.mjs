@@ -1,8 +1,8 @@
-/**
- * Fake ExtensionAPI for exercising registerZvecTools/registerZvecCommands
+/** Fake ExtensionAPI for exercising registerZvecTools/registerZvecCommands
  * without booting a pi session. pi.exec is a real child_process.execFile
  * bound to a PATH with the fake zg bin dir prepended, so argv/cwd/exit-code
- * behavior is tested against the same code path pi uses.
+ * behavior is tested against the same code path pi uses. Captured `on()`
+ * handlers are replayable via `pi.emit(event, ...args)` for lifecycle tests.
  */
 import { execFile } from 'node:child_process';
 import { dirname, join } from 'node:path';
@@ -18,6 +18,7 @@ const toolsModulePromise = import(toolsUrl);
 
 export function createFakePi({ binDir, stateDir } = {}) {
 	const calls = { tools: [], commands: [], exec: [], events: [] };
+	const handlers = {};
 	const pi = {
 		registerTool: (tool) => {
 			calls.tools.push(tool);
@@ -25,9 +26,12 @@ export function createFakePi({ binDir, stateDir } = {}) {
 		registerCommand: (name, def) => {
 			calls.commands.push({ name, def });
 		},
-		on: (event) => {
+		on: (event, handler) => {
 			calls.events.push(event);
+			if (handler) (handlers[event] ??= []).push(handler);
 		},
+		/** Re-emit a registered pi event to the captured handlers (async). */
+		emit: (event, ...args) => Promise.all((handlers[event] ?? []).map((h) => h(...args))),
 		exec: async (command, args, options = {}) => {
 			calls.exec.push({ command, args, options });
 			const env = { ...process.env };
@@ -65,11 +69,16 @@ export async function invokeTool(calls, name, params, ctx) {
 	return tool.execute('call-1', params, ctx.signal, () => {}, ctx);
 }
 
-/** Register the tools/commands against a fake pi. */
-export async function registerSurface(pi) {
+/**
+ * Register the tools/commands against a fake pi.
+ * `includeAutoIndex` also registers the session_start hook (default off so
+ * existing suites keep observing the pre-hook surface).
+ */
+export async function registerSurface(pi, { includeAutoIndex = false } = {}) {
 	const { registerZvecCommands, registerZvecTools } = await toolsModulePromise;
 	registerZvecTools(pi);
 	registerZvecCommands(pi);
+	if (includeAutoIndex) (await toolsModulePromise).registerAutoIndex(pi);
 }
 
 export { toolsModulePromise };

@@ -43,6 +43,10 @@ check(
 	'registers exactly one command: /zg',
 );
 check(
+	calls.events.filter((e) => e === 'session_start').length === 1,
+	'registers the auto-index session_start hook',
+);
+check(
 	typeof calls.commands.find((c) => c.name === 'zg')?.def.getArgumentCompletions === 'function',
 	'/zg exposes argument completions',
 );

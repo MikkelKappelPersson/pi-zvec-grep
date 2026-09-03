@@ -103,6 +103,34 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - Next release: bump package.json (0.3.0), tag, release — CI does the rest
   (publish path unchanged).
 
+## Auto index on session start (added after v0.2.1, not yet released)
+
+- New scoped setting **`autoIndex`** (default `false`): on every `session_start`
+  (deliberately no reason filter — the guard makes re-checks free) the hook
+  runs `zg status --check-ready` with `cwd = root`; when it exits non-zero
+  the hook fires `zg index <root>` in the background — never awaited, never
+  throwing into the lifecycle hook — then `ui.notify`s ("index updated" /
+  "auto index failed: <first line>"). A per-root in-flight `Set` suppresses
+  concurrent builds for the same root; different cwds run independently.
+- Wiring: `config.ts` gains `autoIndex` in `OVERRIDABLE_FIELDS` (+ boolean
+  validator); `settings-ui.ts` gains the **Auto index on start** item
+  (cycles `on`/`off`); `tools.ts` exports `registerAutoIndex(pi)` called from
+  `index.ts`.
+- Tests: `test/verify-autoindex.mjs` (new suite; fake zg gained
+  `stale-slow` (index sleeps `ZFAKE_INDEX_SLEEP`s), `fail-index`, `ready`
+  modes + `resetState()`; fake pi `on()` now captures handlers and
+  `pi.emit(event, …)` replays them). Contract: off/missing → no guard
+  (gating is the setting, not the reason); ready guard → no index call;
+  stale guard → guard first, then async `index <cwd>` with the 10-min
+  timeout; 3 concurrent starts → exactly one build; slot released after
+  completion (next start rebuilds); per-root independence; failed build
+  never rejects the emit. `verify-settings.mjs` covers the layer contract
+  (default off, user on, project delta on/off, non-boolean fallback, empty
+  delta when equal). `verify-surface.mjs` asserts exactly one
+  `session_start` registration.
+- Verified against real `zg` 0.2.1: `zg status --check-ready` exits 1 on a
+  directory without an index and on a stale index (`npm i -g @zvec/zvec-grep`).
+
 ## Publishing state (as of v0.2.1, 2026-09-03)
 
 Live on npm (`latest` tag): **0.2.1** (10 files, provenance signed from
