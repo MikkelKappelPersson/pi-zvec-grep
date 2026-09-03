@@ -69,6 +69,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # verify-cli.mjs exercises the real zg binary (contract guard).
+      # Install it globally, not as a package dependency: the extension
+      # intentionally requires a pre-existing global zg, and a dep here
+      # would shadow that requirement.
+      - name: Install zg CLI
+        run: npm install -g @zvec/zvec-grep@0.2.1
+
       - name: Run tests
         run: npm test
 

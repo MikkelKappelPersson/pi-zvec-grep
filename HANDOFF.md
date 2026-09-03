@@ -48,15 +48,26 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 
 ## What's LEFT (publishing only)
 
+2026-09-03 status: tag `v0.1.0` pushed, GitHub release published (workflow
+`Publish package` fired). First CI run failed at `npm test` — CI runners have no
+`zg`; fixed by an `npm install -g @zvec/zvec-grep@0.2.1` step in
+`.github/workflows/publish.yml` (deliberately global, not a dependency: the
+extension requires a pre-existing global `zg`, and a dep would shadow that).
+Re-running now; the eventual `npm publish` will still fail unless one of:
+
 1. **npm scope ownership** — `@luminascale` must exist on npm owned by your account.
    If already published under your account, skip. For a brand-new package name, GitHub
    OIDC must be trusted on the npm side first (one-time setup); until then a manual
    `npm publish --access public` works, or publish directly once OIDC is configured.
-2. **GitHub trusted publishing** — configure on the new repo
-   (Settings → Deploy tokens / npm trusted publishing), repo name must match what npm has;
-   then protect: only release tags trigger publish.
-3. **Tag the release** — `git tag v0.1.0 && git push origin v0.1.0` and create the
-   release on GitHub (workflow verifies tag == package version).
+2. **GitHub trusted publishing** — configure on the new repo after the first successful
+   publish (Settings: npm package → Trusted publishing): GitHub user
+   `MikkelKappelPersson`, repo `pi-zvec-grep`, default branch, workflow `publish.yml`;
+   then protect: only release tags trigger publish. **Blocker found 2026-09-03:** the
+   token in `~/.npmrc` is stale (401 on `/whoami`) — re-authenticate (browser
+   flow) before any manual publish, or complete the OIDC dance via the npmjs.com UI
+   (per-package trusted-publisher config is UI-only; `npm trust` needs interactive 2FA).
+3. ~~Tag the release~~ DONE — tag `v0.1.0` on `394459e`, release published
+   (workflow verifies tag == package version; a green release run = shipped).
 4. Optional: add the repo to pi-mcp-adapter's known-servers / README "install from git"
    example is already in the README (`pi install git:github.com/MikkelKappelPersson/pi-zvec-grep`).
 
