@@ -49,8 +49,8 @@ check(
 const zgCompletions = calls.commands.find((c) => c.name === 'zg')?.def.getArgumentCompletions?.('');
 check(
 	Array.isArray(zgCompletions) &&
-		zgCompletions.map((i) => i.value).sort().join(',') === 'drop,help,index,rebuild,status',
-	'/zg arg completions list index | rebuild | drop | status | help',
+		zgCompletions.map((i) => i.value).sort().join(',') === 'drop,help,index,rebuild,settings,status',
+	'/zg arg completions list index | rebuild | drop | status | settings | help',
 );
 for (const t of calls.tools) {
 	check(Boolean(t.description), `${t.name} has description`);
@@ -222,6 +222,21 @@ check(
 	'unknown /zg subcommand warns with usage',
 );
 check(calls.exec.length === 0, 'unknown /zg subcommand does not run zg');
+
+// /zg settings: interactive-only surface — non-interactive ctx warns, no zg run, no crash
+calls.exec.length = 0;
+let settingNotices = [];
+await unknownCmd.def.handler('settings', {
+	cwd: ws,
+	hasUI: false,
+	ui: { notify: (m, t) => settingNotices.push({ m, t }) },
+});
+check(
+	settingNotices.length === 1 && settingNotices[0].t === 'warning' && /interactive TUI/.test(settingNotices[0].m),
+	'/zg settings without a UI warns instead of opening the menu',
+	settingNotices.map((n) => n.m).join(' | '),
+);
+check(calls.exec.length === 0, '/zg settings does not run zg');
 
 // dropped legacy aliases: /zg-index and /zg-status are gone
 check(!calls.commands.some((c) => c.name === 'zg-index'), '/zg-index is not registered');

@@ -23,7 +23,7 @@ export interface ZvecSearchQueryParams {
  * Positional query first, then explicit route groups. zg rejects an empty
  * query set itself, but we fail fast with a clearer message for the model.
  */
-export function buildQueryArgs(params: ZvecSearchQueryParams): string[] {
+export function buildQueryArgs(params: ZvecSearchQueryParams, options?: { limit?: number }): string[] {
 	const args: string[] = ['query'];
 	if (!params.query && !params.queries?.length && !params.fts?.length && !params.vector?.length) {
 		throw new Error('zvec_search needs at least one of: query, queries, fts, or vector');
@@ -33,7 +33,7 @@ export function buildQueryArgs(params: ZvecSearchQueryParams): string[] {
 	for (const q of params.fts ?? []) args.push('--fts', q);
 	for (const q of params.vector ?? []) args.push('--vector', q);
 	if (params.fuse) args.push('--fuse');
-	args.push('--limit', String(params.limit ?? DEFAULT_LIMIT));
+	args.push('--limit', String(params.limit ?? options?.limit ?? DEFAULT_LIMIT));
 	for (const g of params.globs ?? []) args.push('-g', g);
 	for (const t of params.fileTypes ?? []) args.push('-t', t);
 	for (const t of params.excludedFileTypes ?? []) args.push('-T', t);

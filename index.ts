@@ -2,6 +2,7 @@
  * pi-zvec-grep — zvec-grep's local-first hybrid search as native pi tools.
  *
  * Entry point only. The tool/command surface lives in src/extension/tools.ts;
+ * scoped settings live in src/extension/config.ts (+ settings-ui.ts menu);
  * workspace path and output helpers live in src/core/.
  */
 

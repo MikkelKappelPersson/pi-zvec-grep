@@ -47,7 +47,35 @@ One slash command, `/zg`, dispatches on a subcommand. All take an optional `[pat
 | `/zg rebuild [path]` | Recreate the index from scratch. |
 | `/zg drop [path]` | **Permanently delete the workspace index** (runs with `--yes`; no prompt). |
 | `/zg status [path]` | Show index presence, coverage, freshness, and the suggested next action. |
+| `/zg settings` | Open the settings menu (interactive TUI): settings scope + default search limit. |
 | `/zg help` | Print usage. |
+
+## Settings
+
+`/zg settings` opens a scoped settings menu (same concept as pi-shepherd's `/shepherd settings`). Two config layers:
+
+| Layer | File | Contents |
+| --- | --- | --- |
+| User (default) | `~/.pi/agent/pi-zvec-grep/config.json` | Base defaults + the `settingsScope` pointer. Always written as the full object. |
+| Project | `<workspace>/.zvec-grep/config.json` (anchored at cwd, no walk-up) | **Delta only** — each field present overrides the user layer; only fields that differ are written. `settingsScope` is never read from or written to the project file. |
+
+- **Settings scope** (`user` \| `project`): where the menu reads its values from and writes its edits to. User scope → edits go to the user file; project scope → edits go to the project delta. Switching to `project` when the file is missing creates it (with a `Config created at …` notification).
+- **Default search limit** (1–50): the `--limit` used by `zvec_search` when the tool call passes no explicit `limit`. An explicit tool-call limit always wins.
+
+Config files are read fresh on every use (mtime-cached), so hand edits take effect immediately.
+
+```jsonc
+// user: ~/.pi/agent/pi-zvec-grep/config.json
+{
+	"settingsScope": "user",
+	"defaultLimit": 7
+}
+
+// project: .zvec-grep/config.json (delta — only fields that differ from user)
+{
+	"defaultLimit": 25
+}
+```
 
 ## Quickstart
 
@@ -88,6 +116,8 @@ src/core/
   zg.ts                  # pi.exec wrapper around the global `zg`
 src/extension/
   tools.ts               # the pi tool + command surface
+  config.ts              # two-layer settings (user file + project delta)
+  settings-ui.ts         # /zg settings menu (SettingsList)
 test/
   verify-*.mjs           # plain node --experimental-strip-types harness
   helpers/
@@ -108,6 +138,7 @@ npm run surface:test    # tool surface + execute wiring (fake)
 npm run queries:test    # buildQueryArgs (pure)
 npm run indexing:test   # buildIndexArgs (pure)
 npm run errors:test     # normalizeRoot/clip/error shaping (pure)
+npm run settings:test   # config layers: scope/delta/write semantics (pure + tool wiring)
 ```
 
 > `verify-cli.mjs` shells out to the real `zg` and will FAIL if `@zvec/zvec-grep` is not installed — install it first, or rely on the hermetic suites for CI without it.

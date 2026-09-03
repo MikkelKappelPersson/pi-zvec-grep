@@ -1,12 +1,16 @@
 /** pi tool + command surface for zvec-grep (zg). */
 
-import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { keyHint } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { Text } from '@earendil-works/pi-tui';
 import type { AutocompleteItem } from '@earendil-works/pi-tui';
 import { buildIndexArgs, type ZvecIndexParams } from '../core/indexing.ts';
 import { buildQueryArgs, type ZvecSearchQueryParams } from '../core/queries.ts';
+import { loadSettings } from './config.ts';
+
+/** Hard cap on hits per group — mirrors the zg query limit ceiling. */
+const MAX_SEARCH_LIMIT = 50;
 import {
 	hitHeadline,
 	parseIndexOutput,
@@ -17,6 +21,7 @@ import {
 	type ZgStatusVerdict,
 } from '../core/format.ts';
 import { clip, normalizeRoot } from '../core/workspace.ts';
+import { openSettings } from './settings-ui.ts';
 import {
 	createZgRunner,
 	ZG_INDEX_TIMEOUT_MS,
@@ -179,7 +184,12 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 		],
 		parameters: searchParams,
 		async execute(_toolCallId: string, params: SearchToolInput, signal: AbortSignal | undefined, _onUpdate: unknown, ctx: ExtensionContext) {
-			const args = buildQueryArgs(params);
+			// Effective limit: explicit tool-call param wins; otherwise the scoped
+			// config default (user file / project delta); hard cap 50.
+			const defaultLimit = Math.min(Math.max(Math.round(loadSettings(ctx.cwd).defaultLimit), 1), MAX_SEARCH_LIMIT);
+			const args = buildQueryArgs(params, {
+				limit: params.limit !== undefined ? Math.min(Math.max(Math.round(params.limit), 1), MAX_SEARCH_LIMIT) : defaultLimit,
+			});
 			const { stdout, stderr, code } = await runZg(args, { cwd: normalizeRoot(params.root, ctx.cwd), signal });
 			if (code !== 0) {
 				throw new Error(stderr || stdout || `zvec_search failed (exit ${code})`);
@@ -351,24 +361,31 @@ const ZG_SUBCOMMANDS: Array<{ name: string; description: string }> = [
 	{ name: 'rebuild', description: 'recreate the index from scratch' },
 	{ name: 'drop', description: 'permanently delete the index' },
 	{ name: 'status', description: 'show index state for the workspace' },
+	{ name: 'settings', description: 'open settings (scope, default limit) — user or project config' },
 	{ name: 'help', description: 'show /zg usage' },
 ];
 
 type ZgMode = 'index' | 'rebuild' | 'drop';
-type ZgCommand = ZgMode | 'status' | 'help';
+type ZgCommand = ZgMode | 'status' | 'settings' | 'help';
 
-const ZG_COMMANDS: readonly ZgCommand[] = ['index', 'rebuild', 'drop', 'status', 'help'];
+const ZG_COMMANDS: readonly ZgCommand[] = ['index', 'rebuild', 'drop', 'status', 'settings', 'help'];
 
 const isZgCommand = (s: string): s is ZgCommand => (ZG_COMMANDS as readonly string[]).includes(s);
 
 /**
  * Split /zg arguments into [command, rootArg]. Bare `/zg` (or `/zg help`)
  * shows usage; otherwise the first token must be a known subcommand.
+ * Discriminated on `command` so callers can narrow after early returns.
  */
-function parseZgCommand(args: string): { command: ZgCommand | 'unknown'; rootArg?: string; unknown?: string } {
+function parseZgCommand(args: string):
+	| { command: 'help' }
+	| { command: 'settings' }
+	| { command: ZgMode | 'status'; rootArg?: string }
+	| { command: 'unknown'; unknown: string } {
 	const tokens = args.trim().split(/\s+/).filter(Boolean);
 	const first = tokens[0];
 	if (!first) return { command: 'help' };
+	if (first === 'settings') return { command: 'settings' };
 	if (isZgCommand(first)) return { command: first, rootArg: tokens[1] };
 	return { command: 'unknown', unknown: args.trim() };
 }
@@ -383,13 +400,14 @@ function zgArgumentCompletions(prefix: string): AutocompleteItem[] | null {
 /** Help text shown for bare `/zg`, `/zg help`, and unknown subcommands. */
 const ZG_USAGE = [
 	'Usage: /zg <subcommand> [path]',
-	'  <subcommand>  one of: index | rebuild | drop | status | help',
-	'  [path]        workspace root (default: current directory)',
+	'  <subcommand>  one of: index | rebuild | drop | status | settings | help',
+	'  [path]        workspace root for index/rebuild/drop/status (default: current directory)',
 	'',
 	'Examples:',
 	'  /zg index',
 	'  /zg index ~/code/proj',
 	'  /zg status .',
+	'  /zg settings',
 ].join('\n');
 
 /**
@@ -397,16 +415,12 @@ const ZG_USAGE = [
  * root the user asked for (cwd-pinned so zg resolves the right index).
  */
 async function runZgCommand(
-	command: ZgCommand,
-	rootArg: string | undefined,
+	parsed: { command: ZgMode | 'status'; rootArg?: string },
 	cwd: string,
 	exec: (command: string, args: string[], options: { cwd?: string; timeout?: number }) => Promise<{ stdout: string; stderr: string; code: number }>,
 	notify: (message: string, type: 'info' | 'warning' | 'error') => void,
 ): Promise<void> {
-	if (command === 'help') {
-		notify(ZG_USAGE, 'info');
-		return;
-	}
+	const { command, rootArg } = parsed;
 	if (command === 'status') {
 		const root = normalizeRoot(rootArg, cwd);
 		const { stdout, stderr, code } = await exec('zg', ['status'], { cwd: root, timeout: ZG_STATUS_TIMEOUT_MS });
@@ -439,19 +453,34 @@ function zgHandler(exec: (command: string, args: string[], options: { cwd?: stri
 			notify(`Unknown /zg subcommand: ${parsed.unknown}\n\n${ZG_USAGE}`, 'warning');
 			return;
 		}
-		await runZgCommand(parsed.command, parsed.rootArg, ctx.cwd, exec, notify);
+		if (parsed.command === 'help') {
+			notify(ZG_USAGE, 'info');
+			return;
+		}
+		// The settings menu is an interactive TUI surface (SettingsList inline in
+		// the editor slot); it cannot render in non-interactive runs. Notify
+		// directly — ui.notify works even where hasUI is false (print/RPC modes).
+		if (parsed.command === 'settings') {
+			if (!ctx.hasUI) {
+				ctx.ui?.notify?.('/zg settings requires the interactive TUI.', 'warning');
+				return;
+			}
+			await openSettings(ctx as ExtensionCommandContext);
+			return;
+		}
+		await runZgCommand(parsed, ctx.cwd, exec, notify);
 	};
 }
 
 /**
  * Register the /zg command: one slash command with subcommand dispatch
- * (index | rebuild | drop | status | help) and argument completion.
+ * (index | rebuild | drop | status | settings | help) and argument completion.
  */
 export function registerZvecCommands(pi: ExtensionAPI): void {
 	const exec = (command: string, args: string[], options: { cwd?: string; timeout?: number }) => pi.exec(command, args, options);
 
 	pi.registerCommand('zg', {
-		description: 'zvec-grep: build index, check status, rebuild, or drop — /zg <index|rebuild|drop|status|help> [path]',
+		description: 'zvec-grep: build index, check status, settings — /zg <index|rebuild|drop|status|settings|help> [path]',
 		getArgumentCompletions: (prefix: string) => zgArgumentCompletions(prefix),
 		handler: zgHandler(exec),
 	});

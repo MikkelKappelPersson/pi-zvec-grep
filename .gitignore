@@ -11,4 +11,5 @@ node_modules/
 *.log
 
 # zg runtime artifacts (indexes live in <workspace>/.zvec-grep, not here)
+# (the project config .zvec-grep/config.json lives there too — local-only, like pi-shepherd's)
 .zvec-grep/

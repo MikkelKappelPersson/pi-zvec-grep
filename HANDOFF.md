@@ -76,6 +76,33 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - Remaining (known good next steps): path shortening in call lines (built-in
   `~/…` convention).
 
+## Settings (added after v0.2.1, not yet released)
+
+- `/zg settings` — scoped settings menu copied straight from pi-shepherd's
+  concept (`/shepherd settings`): first item **Settings scope** (user/project),
+  then the fields. Same two-layer config model:
+  - user layer `~/.pi/agent/pi-zvec-grep/config.json` — full object incl.
+    `settingsScope` (the scope pointer lives only here).
+  - project layer `.zvec-grep/config.json` (cwd-anchored, no walk-up — same root
+    as the workspace index) — *delta* only; fields override user one-by-one;
+    `settingsScope` never read from / written to it.
+- Settings fields (for now, exactly one): **Default search limit** (1–50) —
+  wired into `zvec_search` (explicit tool-call `limit` always wins; scoped
+  default otherwise; hard cap 50). Menu writes follow scope; switching to
+  project scope creates the file + `Config created at .zvec-grep/config.json`
+  notification, mirroring shepherd. Non-interactive runs: `/zg settings`
+  warns instead of opening the TUI menu.
+- Files: `src/extension/config.ts` (copy-paste of shepherd's config.ts
+  patterns, minus timeout/stale-wait migration and the legacy
+  `settings.json`→`config.json` migration this package never had),
+  `src/extension/settings-ui.ts` (same SettingsList/DynamicBorder/inline-slot
+  pattern), `tools.ts` parser gains the `settings` subcommand (no root arg).
+- Tests: `test/verify-settings.mjs` (pure config-layer contract + subprocess
+  tool-wiring: user/project/explicit limit resolution); surface suite asserts
+  completions + non-UI warning. `npm run settings:test` added to the chain.
+- Next release: bump package.json (0.3.0), tag, release — CI does the rest
+  (publish path unchanged).
+
 ## Publishing state (as of v0.2.1, 2026-09-03)
 
 Live on npm (`latest` tag): **0.2.1** (10 files, provenance signed from
