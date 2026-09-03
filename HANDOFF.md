@@ -1,7 +1,7 @@
 # Handoff — pi-zvec-grep
 
 Repo: `/home/mikkelkp/.pi/agent/extensions/pi-zvec-grep` → remote `https://github.com/MikkelKappelPersson/pi-zvec-grep.git`
-npm target: `@luminascale/pi-zvec-grep` (v0.1.0)
+npm target: `@luminascale/pi-zvec-grep` (v0.2.0)
 
 ## What this is
 
@@ -48,7 +48,7 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - LICENSE (Apache-2.0, copied template), README, .gitignore, .prettierrc in place.
 - Committed + pushed to origin (see `git log`).
 
-## TUI rendering (post-v0.1.0, uncommitted-at-release-time)
+## TUI rendering (shipped in v0.2.0)
 
 - `src/core/format.ts` — pi-free parsers for zg's human output:
   - `parseSearchOutput` → `{ groups, totalHits, fileCount, top: ZgHit, hasStale }` (single/multi group, zero hits)
@@ -75,44 +75,39 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - Remaining (known good next steps): path shortening in call lines (built-in
   `~/…` convention).
 
-## What's LEFT (publishing only) — DONE 2026-09-03
+## Publishing state (as of v0.2.0, 2026-09-03)
 
-Published: `@luminascale/pi-zvec-grep@0.1.0` on npm (`latest` tag, 20 files,
-~22.7kB tarball, shasum `e2e655f1…af224d56` — verified against the registry).
-Tag `v0.1.0` points at `9fa9a3c` (code = `394459e`; diff is CI fix + this
-handoff), and the release-run pipeline is verified green end-to-end.
+Live on npm (`latest` tag): **0.2.0** (10 files, 48.6kB, provenance signed from
+GitHub Actions). CI publish path is fully verified end-to-end:
+`git push` → `git tag vX.Y.Z` → `git push origin <tag>` → `gh release create <tag>` →
+the `publish.yml` release workflow builds from the tag, runs `npm test` + installs a
+global `zg`, and runs `npm publish --access public --provenance` via **OIDC trusted
+publishing**. No local `npm publish` is needed — that hits npm 2FA in non-interactive
+shells and is deliberately avoided.
+
+Release verification (registry, after the CI run completes):
+`npm view @luminascale/pi-zvec-grep@<v> version dist.fileCount dist.integrity`.
 
 Publishing history (2026-09-03):
-1. Tag + release fired the workflow; run 1 failed at `npm test` — CI runners
-   have no `zg`. Fixed: `npm install -g @zvec/zvec-grep@0.2.1` step in
-   `.github/workflows/publish.yml` (deliberately global, not a dependency:
-   the extension requires a pre-existing global `zg`). Run 2 still used the
-   *old* workflow def (release events resolve the workflow from the tagged
-   commit) → had to move the tag to the fix commit. Run 3: tests green,
-   tarball clean, failed only at `npm publish` (no trusted publisher yet).
-2. v0.1.0 bootstrapped **manually** from a local terminal
-   (`npm publish --access public`, account + 2FA one-time auth in the
-   interactive `npm` CLI — note npm mangles auth URLs in non-interactive
-   shells, so an interactive terminal is required). Per the npm docs,
-   trusted-publisher records live on the package page, which requires the
-   package to exist first — that's why the workflow was written with the
-   already-published guard.
-3. Release re-published after the manual publish → workflow finished green
-   via the already-published no-op guard (full CI path verified).
+1. v0.1.0 bootstrapped **manually** from an interactive terminal (OIDC not yet
+   configured — trusted-publisher records only exist once the package exists). Tag +
+   release then reran the workflow; run 1 failed at `npm test` (runners have no `zg`)
+   → added `npm install -g @zvec/zvec-grep@0.2.1` step (global, not a dependency, by
+   design). Run 2 used the *old* workflow def (release events resolve the workflow from
+   the tagged commit) → moved the tag to the fix commit. Run 3: tests green, failed only
+   at `npm publish` (no trusted publisher yet). Final run green via the already-published
+   no-op guard.
+2. **OIDC configured in the interim** (npmjs.com package page → trusted publishing: GitHub
+   Actions, user `MikkelKappelPersson`, repo `pi-zvec-grep`, workflow `publish.yml`).
+   Verified by v0.1.1 (9 files) shipping purely through CI with `npm notice publish
+   Signed provenance statement ... Provenance statement published to transparency log`.
+3. v0.2.0 (this release, 10 files) shipped the same way: tag → release → CI green with
+   provenance. No manual publish used.
 
-Remaining (optional, for future releases):
-1. **npm trusted publishing (OIDC)** — UI-only on the npmjs.com package
-   page → access: add trusted publisher GitHub Actions, user
-   `MikkelKappelPersson`, repo `pi-zvec-grep`, default branch, workflow
-   `publish.yml`. Until then: bootstrap each version manually from a local
-   terminal (interactive), then push tag + release for the green run.
-   (`npm trust` also exists but needs interactive 2FA.)
-2. Optional: add the repo to pi-mcp-adapter's known-servers.
-3. Optional cosmetic: add `files: ["index.ts", "src"]` to package.json at the
-   next real version to drop the dev-only `test/` files from the tarball.
-   (Chose NOT to add `.npmignore`: it would replace the working `.gitignore`
-   fallback with a duplicate rule list; parity with pi-shepherd is
-   intentional — its `npm warn gitignore-fallback` line is likewise benign.)
+Remaining (optional for future releases):
+1. Optional: add the repo to pi-mcp-adapter's known-servers.
+2. Optional: pin the `zg` CLI version in `.github/workflows/publish.yml` (currently
+   `@zvec/zvec-grep@0.2.1`) so a new zg major can't silently break the contract guard.
 
 Note: the `npm publish` step will succeed in CI once OIDC is configured;
 no workflow change needed. The already-published guard makes re-runs safe.
