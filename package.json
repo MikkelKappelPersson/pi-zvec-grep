@@ -1,0 +1,62 @@
+{
+  "name": "@luminascale/pi-zvec-grep",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "🔍 zvec-grep's local-first hybrid (semantic + exact) search as native pi tools",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/MikkelKappelPersson/pi-zvec-grep#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MikkelKappelPersson/pi-zvec-grep.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MikkelKappelPersson/pi-zvec-grep/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-agent",
+    "extension",
+    "zvec",
+    "zvec-grep",
+    "grep",
+    "search",
+    "semantic-search",
+    "vector-search",
+    "bm25",
+    "ripgrep",
+    "code-search",
+    "local-first"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "clean": "echo 'nothing to clean'",
+    "build": "echo 'nothing to build'",
+    "check": "echo 'nothing to check'",
+    "cli:test": "node --experimental-strip-types --disable-warning=ExperimentalWarning test/verify-cli.mjs",
+    "surface:test": "node --experimental-strip-types --disable-warning=ExperimentalWarning test/verify-surface.mjs",
+    "queries:test": "node --experimental-strip-types --disable-warning=ExperimentalWarning test/verify-queries.mjs",
+    "indexing:test": "node --experimental-strip-types --disable-warning=ExperimentalWarning test/verify-indexing.mjs",
+    "errors:test": "node --experimental-strip-types --disable-warning=ExperimentalWarning test/verify-errors.mjs",
+    "test": "npm run cli:test && npm run surface:test && npm run queries:test && npm run indexing:test && npm run errors:test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.4",
+    "@earendil-works/pi-tui": "^0.84.4",
+    "typebox": "^1.3.7"
+  }
+}

@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs / temp
+*.log
+
+# zg runtime artifacts (indexes live in <workspace>/.zvec-grep, not here)
+.zvec-grep/
