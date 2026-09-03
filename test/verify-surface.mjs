@@ -39,8 +39,18 @@ check(
 	'registers exactly zvec_index, zvec_search, zvec_status',
 );
 check(
-	calls.commands.map((c) => c.name).sort().join(',') === 'zg-index,zg-status',
-	'registers exactly /zg-index and /zg-status',
+	calls.commands.map((c) => c.name).sort().join(',') === 'zg',
+	'registers exactly one command: /zg',
+);
+check(
+	typeof calls.commands.find((c) => c.name === 'zg')?.def.getArgumentCompletions === 'function',
+	'/zg exposes argument completions',
+);
+const zgCompletions = calls.commands.find((c) => c.name === 'zg')?.def.getArgumentCompletions?.('');
+check(
+	Array.isArray(zgCompletions) &&
+		zgCompletions.map((i) => i.value).sort().join(',') === 'drop,help,index,rebuild,status',
+	'/zg arg completions list index | rebuild | drop | status | help',
 );
 for (const t of calls.tools) {
 	check(Boolean(t.description), `${t.name} has description`);
@@ -165,5 +175,56 @@ check(calls.exec.filter((c) => c.args[0] === 'status').some((c) => c.options?.ti
 for (const cmd of calls.commands) {
 	check(typeof cmd.def.handler === 'function', `${cmd.name} handler is a function`);
 }
+
+// /zg dispatch: subcommand + path are routed to the right zg argv with cwd pinned
+const invokeCommand = async (name, args, cwd) => {
+	const cmd = calls.commands.find((c) => c.name === name);
+	assert.ok(cmd, `command ${name} registered`);
+	const notices = [];
+	await cmd.def.handler(args, { cwd, hasUI: true, ui: { notify: (m, t) => notices.push({ m, t }) } });
+	return notices;
+};
+
+await invokeCommand('zg', 'index', ws);
+let cmdState = fake.readState('index');
+check(cmdState !== undefined && cmdState.args[0] === ws, '/zg index targets the cwd workspace');
+check(!cmdState.args.includes('--rebuild') && !cmdState.args.includes('--drop'), '/zg index is a plain update');
+
+await invokeCommand('zg', 'status proj', ws);
+let sState = fake.readState('status');
+check(sState?.cwd === join(ws, 'proj'), '/zg status <path> pins cwd to the path');
+
+await invokeCommand('zg', 'index proj', ws);
+check(fake.readState('index')?.cwd === join(ws, 'proj'), '/zg index <path> indexes the named workspace');
+
+// rebuild/drop are subcommands of /zg too
+await invokeCommand('zg', 'rebuild proj', ws);
+check(fake.readState('index')?.args.includes('--rebuild'), '/zg rebuild passes --rebuild');
+await invokeCommand('zg', 'drop proj', ws);
+check(fake.readState('index')?.args.includes('--drop') && fake.readState('index')?.args.includes('--yes'), '/zg drop uses --drop --yes');
+
+// bare /zg and /zg show usage without running zg
+calls.exec.length = 0;
+await invokeCommand('zg', '', ws);
+await invokeCommand('zg', 'help', ws);
+check(calls.exec.length === 0, 'bare /zg and /zg help do not run zg');
+
+// unknown subcommand: warning, no zg run
+let unknownNotices = [];
+const unknownCmd = calls.commands.find((c) => c.name === 'zg');
+await unknownCmd.def.handler('frobnicate', {
+	cwd: ws,
+	hasUI: true,
+	ui: { notify: (m, t) => unknownNotices.push({ m, t }) },
+});
+check(
+	unknownNotices.length === 1 && unknownNotices[0].t === 'warning' && unknownNotices[0].m.includes('Usage'),
+	'unknown /zg subcommand warns with usage',
+);
+check(calls.exec.length === 0, 'unknown /zg subcommand does not run zg');
+
+// dropped legacy aliases: /zg-index and /zg-status are gone
+check(!calls.commands.some((c) => c.name === 'zg-index'), '/zg-index is not registered');
+check(!calls.commands.some((c) => c.name === 'zg-status'), '/zg-status is not registered');
 
 done();

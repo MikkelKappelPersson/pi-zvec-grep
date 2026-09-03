@@ -7,7 +7,8 @@ npm target: `@luminascale/pi-zvec-grep` (v0.2.0)
 
 A pi extension (package format, same layout as sibling `pi-shepherd`) that exposes the
 global `zg` CLI ([zvec-grep](https://github.com/zvec-ai/zvec-grep)) as three native pi
-tools plus two slash commands. No MCP server involved — everything shells out to `zg`
+tools plus a `/zg` slash command (index / rebuild / drop / status / help).
+No MCP server involved — everything shells out to `zg`
 via `pi.exec`.
 
 Surfaces:
@@ -15,8 +16,8 @@ Surfaces:
   fuse, globs, file types, symbol focus, mtime filters, optional `root`)
 - `zvec_index` — index / rebuild / drop a workspace (local embedding models recommended)
 - `zvec_status` — index presence/coverage/freshness; missing index is a normal state
-- `/zg-index [path]` — build/update index for cwd (or named path)
-- `/zg-status [path]` — show index state
+- `/zg <index|rebuild|drop|status|help> [path]` — one command with subcommand args and
+  argument completion; bare `/zg` shows usage
 
 Design rule baked into tool descriptions: `zvec_search` = meaning/fuzzy/unknown-location
 questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's managed
@@ -137,7 +138,7 @@ pi install /home/mikkelkp/.pi/agent/extensions/pi-zvec-grep   # local path insta
 # or just run pi in this folder — package with pi.extensions manifest is auto-discovered
 ```
 
-Then in any project: `/zg-index` once, and `zvec_search` is available to the model.
+Then in any project: `/zg index` once, and `zvec_search` is available to the model.
 
 ## Known boundaries (deliberate, documented in README)
 

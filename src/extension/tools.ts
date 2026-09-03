@@ -4,6 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 import { keyHint } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { Text } from '@earendil-works/pi-tui';
+import type { AutocompleteItem } from '@earendil-works/pi-tui';
 import { buildIndexArgs, type ZvecIndexParams } from '../core/indexing.ts';
 import { buildQueryArgs, type ZvecSearchQueryParams } from '../core/queries.ts';
 import {
@@ -29,7 +30,7 @@ import {
  */
 const SEARCH_GUIDANCE =
 	'For exact strings, regex, filenames, counts, file lists, or anything piped, use bash rg instead. ' +
-	'Requires a workspace index (zvec_index or /zg-index); zg reports a clear hint when one is missing.';
+	'Requires a workspace index (zvec_index tool or /zg index); zg reports a clear hint when one is missing.';
 
 const searchParams = Type.Object({
 	query: Type.Optional(Type.String({ description: 'One hybrid natural-language or exact query — the usual way to call this tool' })),
@@ -344,34 +345,114 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 	});
 }
 
-/** Register /zg-index and /zg-status. */
-export function registerZvecCommands(pi: ExtensionAPI): void {
-	pi.registerCommand('zg-index', {
-		description: 'Build or update the zvec-grep index for the current (or named) workspace',
-		handler: async (args: string, ctx) => {
-			const root = normalizeRoot(args, ctx.cwd);
-			if (ctx.hasUI) ctx.ui.notify(`Building zvec index for ${root}… (this can take a while)`, 'info');
-			const { stdout, stderr, code } = await pi.exec('zg', ['index', root], {
-				cwd: root,
-				timeout: ZG_INDEX_TIMEOUT_MS,
-			});
-			if (code !== 0) {
-				if (ctx.hasUI) ctx.ui.notify(`zg index failed: ${stderr || stdout || `exit ${code}`}`, 'error');
-				return;
-			}
-			if (ctx.hasUI) ctx.ui.notify('zvec index updated.', 'info');
-		},
-	});
+/** /zg subcommands: first-token dispatch, shown in arg autocomplete and help. */
+const ZG_SUBCOMMANDS: Array<{ name: string; description: string }> = [
+	{ name: 'index', description: 'build or update the workspace index' },
+	{ name: 'rebuild', description: 'recreate the index from scratch' },
+	{ name: 'drop', description: 'permanently delete the index' },
+	{ name: 'status', description: 'show index state for the workspace' },
+	{ name: 'help', description: 'show /zg usage' },
+];
 
-	pi.registerCommand('zg-status', {
-		description: 'Show zvec-grep index state for the current (or named) workspace',
-		handler: async (args: string, ctx) => {
-			const root = normalizeRoot(args, ctx.cwd);
-			const { stdout, stderr, code } = await pi.exec('zg', ['status'], {
-				cwd: root,
-				timeout: ZG_STATUS_TIMEOUT_MS,
-			});
-			if (ctx.hasUI) ctx.ui.notify(stdout || stderr || '(no output)', code !== 0 ? 'warning' : 'info');
-		},
+type ZgMode = 'index' | 'rebuild' | 'drop';
+type ZgCommand = ZgMode | 'status' | 'help';
+
+const ZG_COMMANDS: readonly ZgCommand[] = ['index', 'rebuild', 'drop', 'status', 'help'];
+
+const isZgCommand = (s: string): s is ZgCommand => (ZG_COMMANDS as readonly string[]).includes(s);
+
+/**
+ * Split /zg arguments into [command, rootArg]. Bare `/zg` (or `/zg help`)
+ * shows usage; otherwise the first token must be a known subcommand.
+ */
+function parseZgCommand(args: string): { command: ZgCommand | 'unknown'; rootArg?: string; unknown?: string } {
+	const tokens = args.trim().split(/\s+/).filter(Boolean);
+	const first = tokens[0];
+	if (!first) return { command: 'help' };
+	if (isZgCommand(first)) return { command: first, rootArg: tokens[1] };
+	return { command: 'unknown', unknown: args.trim() };
+}
+
+/** First token typed after `/zg` → subcommand items; none once a second token is entered. */
+function zgArgumentCompletions(prefix: string): AutocompleteItem[] | null {
+	const p = (prefix ?? '').trimStart();
+	if (p.includes(' ')) return null;
+	return ZG_SUBCOMMANDS.map((s) => ({ value: s.name, label: s.name, description: s.description })).filter((i) => i.value.startsWith(p));
+}
+
+/** Help text shown for bare `/zg`, `/zg help`, and unknown subcommands. */
+const ZG_USAGE = [
+	'Usage: /zg <subcommand> [path]',
+	'  <subcommand>  one of: index | rebuild | drop | status | help',
+	'  [path]        workspace root (default: current directory)',
+	'',
+	'Examples:',
+	'  /zg index',
+	'  /zg index ~/code/proj',
+	'  /zg status .',
+].join('\n');
+
+/**
+ * Shared /zg handler logic: run the requested command against the workspace
+ * root the user asked for (cwd-pinned so zg resolves the right index).
+ */
+async function runZgCommand(
+	command: ZgCommand,
+	rootArg: string | undefined,
+	cwd: string,
+	exec: (command: string, args: string[], options: { cwd?: string; timeout?: number }) => Promise<{ stdout: string; stderr: string; code: number }>,
+	notify: (message: string, type: 'info' | 'warning' | 'error') => void,
+): Promise<void> {
+	if (command === 'help') {
+		notify(ZG_USAGE, 'info');
+		return;
+	}
+	if (command === 'status') {
+		const root = normalizeRoot(rootArg, cwd);
+		const { stdout, stderr, code } = await exec('zg', ['status'], { cwd: root, timeout: ZG_STATUS_TIMEOUT_MS });
+		notify(stdout || stderr || '(no output)', code !== 0 ? 'warning' : 'info');
+		return;
+	}
+	// index / rebuild / drop (command is narrowed to ZgMode past the early returns)
+	const mode: ZgMode = command;
+	const root = normalizeRoot(rootArg, cwd);
+	notify(`Running zg ${mode} for ${root}… (this can take a while)`, 'info');
+	const argv = ['index', root];
+	if (mode === 'rebuild') argv.push('--rebuild');
+	if (mode === 'drop') argv.push('--drop', '--yes');
+	const { stdout, stderr, code } = await exec('zg', argv, { cwd: root, timeout: ZG_INDEX_TIMEOUT_MS });
+	if (code !== 0) {
+		notify(`zg ${mode} failed: ${stderr || stdout || `exit ${code}`}`, 'error');
+		return;
+	}
+	notify(mode === 'drop' ? 'zvec index dropped.' : 'zvec index updated.', 'info');
+}
+
+/** Shared /zg command handler: parse the subcommand, then run it. */
+function zgHandler(exec: (command: string, args: string[], options: { cwd?: string; timeout?: number }) => Promise<{ stdout: string; stderr: string; code: number }>) {
+	return async (args: string, ctx: ExtensionContext) => {
+		const parsed = parseZgCommand(args);
+		const notify = (message: string, type: 'info' | 'warning' | 'error') => {
+			if (ctx.hasUI) ctx.ui.notify(message, type);
+		};
+		if (parsed.command === 'unknown') {
+			notify(`Unknown /zg subcommand: ${parsed.unknown}\n\n${ZG_USAGE}`, 'warning');
+			return;
+		}
+		await runZgCommand(parsed.command, parsed.rootArg, ctx.cwd, exec, notify);
+	};
+}
+
+/**
+ * Register the /zg command: one slash command with subcommand dispatch
+ * (index | rebuild | drop | status | help) and argument completion.
+ */
+export function registerZvecCommands(pi: ExtensionAPI): void {
+	const exec = (command: string, args: string[], options: { cwd?: string; timeout?: number }) => pi.exec(command, args, options);
+
+	pi.registerCommand('zg', {
+		description: 'zvec-grep: build index, check status, rebuild, or drop — /zg <index|rebuild|drop|status|help> [path]',
+		getArgumentCompletions: (prefix: string) => zgArgumentCompletions(prefix),
+		handler: zgHandler(exec),
 	});
 }

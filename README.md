@@ -39,16 +39,21 @@ Restart pi or run `/reload`.
 
 ## Commands
 
+One slash command, `/zg`, dispatches on a subcommand. All take an optional `[path]` (workspace root; defaults to the current directory). Bare `/zg` or `/zg help` prints usage.
+
 | Command | What it does |
 | --- | --- |
-| `/zg-index [path]` | Build or update the zvec index for the current (or named) workspace. |
-| `/zg-status [path]` | Show zvec index state for the current (or named) workspace. |
+| `/zg index [path]` | Create or incrementally update the workspace index. |
+| `/zg rebuild [path]` | Recreate the index from scratch. |
+| `/zg drop [path]` | **Permanently delete the workspace index** (runs with `--yes`; no prompt). |
+| `/zg status [path]` | Show index presence, coverage, freshness, and the suggested next action. |
+| `/zg help` | Print usage. |
 
 ## Quickstart
 
 ```bash
 # index a workspace once (local model auto-downloads, stays on disk)
-/zg-index
+/zg index
 
 # then just ask the agent — it picks zvec_search on its own
 ```
