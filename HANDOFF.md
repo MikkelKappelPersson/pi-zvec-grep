@@ -76,7 +76,7 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - Remaining (known good next steps): path shortening in call lines (built-in
   `~/…` convention).
 
-## Settings (added after v0.2.1, not yet released)
+## Settings (added after v0.2.1, released in v0.3.0)
 
 - `/zg settings` — scoped settings menu copied straight from pi-shepherd's
   concept (`/shepherd settings`): first item **Settings scope** (user/project),
@@ -100,10 +100,8 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - Tests: `test/verify-settings.mjs` (pure config-layer contract + subprocess
   tool-wiring: user/project/explicit limit resolution); surface suite asserts
   completions + non-UI warning. `npm run settings:test` added to the chain.
-- Next release: bump package.json (0.3.0), tag, release — CI does the rest
-  (publish path unchanged).
 
-## Auto index on session start (added after v0.2.1, not yet released)
+## Auto index on session start (released in v0.3.0, 2026-09-03)
 
 - New scoped setting **`autoIndex`** (default `false`): on every `session_start`
   (deliberately no reason filter — the guard makes re-checks free) the hook
@@ -131,9 +129,9 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - Verified against real `zg` 0.2.1: `zg status --check-ready` exits 1 on a
   directory without an index and on a stale index (`npm i -g @zvec/zvec-grep`).
 
-## Publishing state (as of v0.2.1, 2026-09-03)
+## Publishing state (as of v0.3.0, 2026-09-03)
 
-Live on npm (`latest` tag): **0.2.1** (10 files, provenance signed from
+Live on npm (`latest` tag): **0.3.0** (12 files, provenance signed from
 GitHub Actions). CI publish path is fully verified end-to-end:
 `git push` → `git tag vX.Y.Z` → `git push origin <tag>` → `gh release create <tag>` →
 the `publish.yml` release workflow builds from the tag, runs `npm test` + installs a
@@ -162,6 +160,13 @@ Publishing history (2026-09-03):
 4. v0.2.1 (10 files, 2026-09-03): single /zg command with subcommand dispatch
    (rebuild/drop added to the slash surface; /zg-index + /zg-status dropped).
    Same tag → release → CI green path, clean run in 43s.
+5. v0.3.0 (12 files, 2026-09-03): auto-index on session start (`autoIndex`
+   setting, default off) — guarded by `zg status --check-ready` (real-zg exit
+   semantics verified: 1 on no index and on stale), fire-and-forget build with
+   per-root in-flight dedupe; `/zg settings` toggle; new `verify-autoindex`
+   test suite + fake zg ready/stale-slow/fail-index modes. Tag `v0.3.0` →
+   release → CI green → provenance-published. (Note: the settings feature
+   landed in the same 0.3.0 — its "next release" line is closed by this.)
 
 Remaining (optional for future releases):
 1. Optional: add the repo to pi-mcp-adapter's known-servers.
