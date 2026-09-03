@@ -1,10 +1,18 @@
 /** pi tool + command surface for zvec-grep (zg). */
 
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
+import { keyHint } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { Text } from '@earendil-works/pi-tui';
 import { buildIndexArgs, type ZvecIndexParams } from '../core/indexing.ts';
 import { buildQueryArgs, type ZvecSearchQueryParams } from '../core/queries.ts';
+import {
+	hitHeadline,
+	parseSearchOutput,
+	parseStatusVerdict,
+	type ZgSearchSummary,
+	type ZgStatusVerdict,
+} from '../core/format.ts';
 import { clip, normalizeRoot } from '../core/workspace.ts';
 import {
 	createZgRunner,
@@ -66,6 +74,69 @@ function callRow(context: { lastComponent?: unknown }, content: string): Text {
 	return text;
 }
 
+/** Theme surface we use (subset of pi's theme object). */
+interface ThemeFg {
+	fg(color: string, s: string): string;
+	bold(s: string): string;
+}
+
+/** Shape of the result object as passed to renderResult by the tool row. */
+interface RenderResult {
+	content: Array<{ type: string; text?: string }>;
+	details?: unknown;
+}
+
+function resultText(result: RenderResult): string {
+	for (const c of result.content) {
+		if (c.type === 'text' && typeof c.text === 'string') return c.text;
+	}
+	return '';
+}
+
+/** Expand hint on collapsed rows; deferred so module import never touches the pi theme. */
+function expandHint(): string {
+	return ' ' + keyHint('app.tools.expand', 'to expand');
+}
+
+/** Minimal result renderer: first few dim lines + expand hint (unknown format). */
+function previewRow(raw: string, theme: ThemeFg, lines = 3): Text {
+	const rows = raw.split('\n');
+	let text = rows.slice(0, lines).map((l) => theme.fg('dim', l)).join('\n');
+	if (rows.length > lines) text += theme.fg('muted', `\n… ${rows.length - lines} more lines${expandHint()}`);
+	return new Text(text, 0, 0);
+}
+
+/** Styled full `zg query` output for expanded rows. */
+function styledSearchOutput(raw: string, theme: ThemeFg): string {
+	return raw
+		.split('\n')
+		.map((l) => {
+			const hm = l.match(/^#(\d+) (matchedBy=\S+ )?(\S.*)$/);
+			if (hm) {
+				return `${theme.fg('muted', `#${hm[1]}`)} ${hm[2] ? theme.fg('dim', hm[2]) : ''}${hm[2] ? ' ' : ''}${theme.fg('accent', hm[3])}`;
+			}
+			if (/^Q\d+ \[/.test(l)) return theme.fg('accent', l);
+			if (/^(query groups|hits:|results:|status:)/.test(l)) return theme.fg('muted', l);
+			if (/^(heading|heading_level|scope|symbol):/.test(l)) return theme.fg('dim', l);
+			if (l.startsWith('…(truncated')) return theme.fg('warning', l);
+			return theme.fg('toolOutput', l);
+		})
+		.join('\n');
+}
+
+/** Render error text: first line in error color, remainder as tool output when expanded. */
+function errorRow(raw: string, theme: ThemeFg, expanded: boolean): Text {
+	const rows = raw.split('\n');
+	const head = rows[0] ?? 'error';
+	let text = theme.fg('error', head);
+	if (expanded && rows.length > 1) {
+		text += '\n' + rows.slice(1).map((l) => theme.fg('toolOutput', l)).join('\n');
+	} else if (rows.length > 1) {
+		text += theme.fg('muted', expandHint());
+	}
+	return new Text(text, 0, 0);
+}
+
 /** Search tool params as the LLM sees them (root optional, cwd fallback). */
 export type SearchToolInput = ZvecSearchQueryParams & { root?: string };
 export type StatusToolInput = { root?: string };
@@ -93,9 +164,10 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 			if (code !== 0) {
 				throw new Error(stderr || stdout || `zvec_search failed (exit ${code})`);
 			}
+			const summary = parseSearchOutput(stdout);
 			return {
 				content: [{ type: 'text' as const, text: clip(stdout) }],
-				details: {},
+				details: summary ? { summary } : {},
 			};
 		},
 		renderCall(args, theme, context) {
@@ -110,6 +182,27 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 			if (filters.length > 0) line += ` ${theme.fg('dim', `(${filters.join(', ')})`)}`;
 			if (a.limit !== undefined) line += ` ${theme.fg('dim', `limit ${a.limit}`)}`;
 			return callRow(context, line);
+		},
+		renderResult(result: RenderResult, options: { expanded: boolean; isPartial: boolean }, theme: ThemeFg, context: { isError?: boolean }) {
+			if (options.isPartial) return new Text(theme.fg('warning', 'searching…'), 0, 0);
+			const raw = resultText(result);
+			if (context.isError || raw.trimStart().startsWith('Error:')) {
+				return errorRow(raw, theme, options.expanded);
+			}
+			const summary = (result.details as { summary?: ZgSearchSummary } | undefined)?.summary;
+			if (options.expanded) {
+				const styled = summary ? styledSearchOutput(raw, theme) : raw;
+				return new Text(theme.fg('toolOutput', styled), 0, 0);
+			}
+			if (!summary) return previewRow(raw, theme);
+			if (summary.totalHits === 0) {
+				return new Text(theme.fg('muted', 'no hits'), 0, 0);
+			}
+			let line = theme.fg('success', `✓ ${summary.totalHits} hit${summary.totalHits === 1 ? '' : 's'} · ${summary.fileCount} file${summary.fileCount === 1 ? '' : 's'}`);
+			if (summary.hasStale) line += theme.fg('warning', ' · stale');
+			line += theme.fg('muted', expandHint());
+			if (summary.top) line += '\n' + theme.fg('muted', `   ${hitHeadline(summary.top)}`);
+			return new Text(line, 0, 0);
 		},
 	});
 
@@ -169,14 +262,28 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 			});
 			// A missing index must not surface as a tool error — it is the normal
 			// pre-`zvec_index` state and the agent should react to the hint text.
+			const text = clip(stdout || stderr || '(no output)');
+			const verdict = parseStatusVerdict(stdout);
 			return {
-				content: [{ type: 'text' as const, text: clip(stdout || stderr || '(no output)') }],
-				details: {},
+				content: [{ type: 'text' as const, text }],
+				details: verdict ? { verdict } : {},
 			};
 		},
 		renderCall(args, theme, context) {
 			const root = (args as StatusToolInput).root;
 			return callRow(context, `${theme.fg('toolTitle', theme.bold('zvec_status'))} ${theme.fg('toolOutput', root ?? '(cwd)')}`);
+		},
+		renderResult(result: RenderResult, options: { expanded: boolean; isPartial: boolean }, theme: ThemeFg, _context: { isError?: boolean }) {
+			if (options.isPartial) return new Text(theme.fg('muted', 'checking…'), 0, 0);
+			const raw = resultText(result);
+			const verdict = (result.details as { verdict?: ZgStatusVerdict } | undefined)?.verdict ?? parseStatusVerdict(raw);
+			if (!options.expanded) {
+				if (!verdict) return previewRow(raw, theme, 2);
+				const color = verdict.kind === 'ready' ? 'success' : verdict.kind === 'needs-update' ? 'warning' : 'muted';
+				const long = raw.split('\n').length > 4;
+				return new Text(theme.fg(color, verdict.line) + (long ? theme.fg('muted', expandHint()) : ''), 0, 0);
+			}
+			return new Text(raw.split('\n').map((l) => theme.fg('toolOutput', l)).join('\n'), 0, 0);
 		},
 	});
 }

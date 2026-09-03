@@ -26,13 +26,15 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 
 - Layout mirrors pi-shepherd: `index.ts` entry → `src/core/` (pure argv/normalization helpers)
   → `src/extension/tools.ts` (pi surface). No runtime imports in `src/core/`.
-- `npm test` — all 5 suites green:
+- `npm test` — all 6 suites green:
   - `verify-cli.mjs` — real `zg` 0.2.1 contract (query/index flags, managed `--rg` accepted
     flags, rejected output-format flags `-c/-l/--json`, no-index error code)
   - `verify-surface.mjs` — real `index.ts` against fake pi + fake `zg` on PATH: registration,
     schemas, argv/cwd/signal wiring, drop→`--yes`, error path, timeouts
   - `verify-queries.mjs` / `verify-indexing.mjs` — pure argv-builder contracts
   - `verify-errors.mjs` — normalizeRoot (cwd fallback, `@`-strip) + clip + error shaping
+  - `verify-format.mjs` — zg output parsers (search summary, status verdict, hit headline)
+    against captured real output; unrecognized input → undefined, never throws
 - Hermetic by design: tests need no real index/network; only `verify-cli` needs `zg`
   installed (it is: 0.2.1 globally).
 - E2E through pi's **actual** jiti loader + pi aliases + real zg: register → no-index throw
@@ -45,6 +47,30 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
   release → `npm ci` → `npm test` → `npm publish --access public --provenance`).
 - LICENSE (Apache-2.0, copied template), README, .gitignore, .prettierrc in place.
 - Committed + pushed to origin (see `git log`).
+
+## TUI rendering (post-v0.1.0, uncommitted-at-release-time)
+
+- `src/core/format.ts` — pi-free parsers for zg's human output:
+  - `parseSearchOutput` → `{ groups, totalHits, fileCount, top: ZgHit, hasStale }` (single/multi group, zero hits)
+  - `parseStatusVerdict` → `ready | needs-update | missing` one-liner (parses block header + Changes line)
+  - `hitHeadline` — `FILE:lines — heading|symbol|preview` (label over preview, clipped)
+  - Contract: unrecognized shape → `undefined` → renderers fall back to raw dim preview; never throw.
+- `tools.ts` renderers, built on pi's standard theming (pending/success/error background comes
+  free from the default Box shell):
+  - All `renderCall`s: bold tool name (`toolTitle`) + accent primary arg + dim filters/limit,
+    `context.lastComponent` reuse; zvec_index colors `rebuild` warning / `drop` error.
+  - `zvec_search.renderResult` — collapsed: `✓ N hits · M files [· stale] (⏎ to expand)` in
+    success/warning + top-hit headline dimmed; expanded: styled raw output (hit refs accent,
+    matchedBy/metadata dim, truncation warning); errors: head line in `error` color, rest on expand.
+  - `zvec_status.renderResult` — collapsed: color-coded verdict (success/warning/muted-dim);
+    expanded: full toolOutput block. Missing index renders as muted verdict, not error.
+  - `keyHint('app.tools.expand')` is the expand hint (deferred call — module import must not touch
+    pi's theme, which breaks the hermetic node test loader).
+  - Structured data rides in `details` (`summary` / `verdict`) so session state survives re-renders
+    and branching; renderers also re-parse `content` text as fallback for old sessions.
+- Remaining (known good next steps): zvec_index live elapsed timer (bash-renderer
+  startedAt/interval/invalidate pattern), path shortening in call lines (built-in
+  `~/…` convention), parse `zg index` output for a one-line finish summary.
 
 ## What's LEFT (publishing only) — DONE 2026-09-03
 
