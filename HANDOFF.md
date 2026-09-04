@@ -212,8 +212,12 @@ Two decisions (2026-09-03), iterating on the v0.3.0 two-layer model:
   *directory*, so the config needs an explicit re-include to ship (`.zvec-grep/*`
   + `!.zvec-grep/config.json`). The committed file activates project scope
   for every machine that pulls it — the intended team-wide mechanism.
-- All 6 suites green; committed locally. **Not released — no version bump,
-  no tag, no publish** (explicit decision; bump to 0.4.0 when shipping).
+- All 6 suites green; committed locally. **Version bumped to 0.3.1
+  locally (package.json + lock), but NOT released — no tag, no publish**
+  (explicit decision; bump chosen as a patch rather than a 0.4.0 minor). Ship
+  when wanted: `git push` → `git tag v0.3.1` → `git push origin v0.3.1` →
+  gh release (CI publishes via OIDC + provenance), then verify with
+  `npm view @luminascale/pi-zvec-grep@0.3.1 version`.
 - Deliberately diverges from pi-shepherd's delta model (same latent issues);
   mirror there later if parity is wanted.
 
