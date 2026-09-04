@@ -212,12 +212,9 @@ Two decisions (2026-09-03), iterating on the v0.3.0 two-layer model:
   *directory*, so the config needs an explicit re-include to ship (`.zvec-grep/*`
   + `!.zvec-grep/config.json`). The committed file activates project scope
   for every machine that pulls it — the intended team-wide mechanism.
-- All 6 suites green; committed locally. **Version bumped to 0.3.1
-  locally (package.json + lock), but NOT released — no tag, no publish**
-  (explicit decision; bump chosen as a patch rather than a 0.4.0 minor). Ship
-  when wanted: `git push` → `git tag v0.3.1` → `git push origin v0.3.1` →
-  gh release (CI publishes via OIDC + provenance), then verify with
-  `npm view @luminascale/pi-zvec-grep@0.3.1 version`.
+- All 6 suites green. **Shipped as v0.3.1** (see publishing history item 6
+  below): tag `v0.3.1` on `4902849`, gh release with migration notes, CI
+  publish green, provenance on the registry.
 - Deliberately diverges from pi-shepherd's delta model (same latent issues);
   mirror there later if parity is wanted.
 
@@ -234,9 +231,9 @@ superseded within the same session (nothing was pushed):
    deleted the key) — commit `38f3311`, superseded by the boolean-refactor
    commit. If that exact state is ever needed, `git show 38f3311`.
 
-## Publishing state (as of v0.3.0, 2026-09-03)
+## Publishing state (as of v0.3.1, 2026-09-04)
 
-Live on npm (`latest` tag): **0.3.0** (12 files, provenance signed from
+Live on npm (`latest` tag): **0.3.1** (12 files, provenance signed from
 GitHub Actions). CI publish path is fully verified end-to-end:
 `git push` → `git tag vX.Y.Z` → `git push origin <tag>` → `gh release create <tag>` →
 the `publish.yml` release workflow builds from the tag, runs `npm test` + installs a
@@ -272,6 +269,11 @@ Publishing history (2026-09-03):
    test suite + fake zg ready/stale-slow/fail-index modes. Tag `v0.3.0` →
    release → CI green → provenance-published. (Note: the settings feature
    landed in the same 0.3.0 — its "next release" line is closed by this.)
+6. **v0.3.1 (2026-09-04, shipped):** per-workspace boolean-flag settings
+   model (see the semantics section above). Tag `v0.3.1` on `4902849` →
+   gh release → CI publish run 33915506739 green → provenance-published
+   (12 files, `npm view @luminascale/pi-zvec-grep@0.3.1` verified,
+   `latest` → 0.3.1).
 
 Remaining (optional for future releases):
 1. Optional: add the repo to pi-mcp-adapter's known-servers.
