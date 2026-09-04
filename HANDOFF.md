@@ -129,6 +129,107 @@ questions; plain `rg` stays for exact strings, counts, file lists, pipes (zg's m
 - Verified against real `zg` 0.2.1: `zg status --check-ready` exits 1 on a
   directory without an index and on a stale index (`npm i -g @zvec/zvec-grep`).
 
+## Project settings semantics: final model (unreleased, built after v0.3.0)
+
+Two decisions (2026-09-03), iterating on the v0.3.0 two-layer model:
+
+1. **Delta → self-contained file.** The project layer used to store a *delta*
+   against the user layer (only fields differing on the author's machine),
+   making a committed file machine-dependent: absent fields silently
+   resolved to each teammate's own user values, and present fields could not
+   be told apart from personal overrides.
+2. **Machine-global → per-workspace activation.** `settingsScope` lived in
+   the USER file and applied to every workspace (one global switch: switch
+   to project in one repo and every other repo silently ran on defaults or
+   its own file). The activation now lives in the PROJECT file itself — and
+   in a third refinement inside the same session, as a **boolean** instead
+   of a string: a repo can only ever flip the settings of its own
+   workspace, never the machine. The user file is values-only.
+
+### Final model
+
+- **User layer** `~/.pi/agent/pi-zvec-grep/config.json` — values only
+  (`defaultLimit`, `autoIndex`). No scope flags: a stray `projectScope` key
+  is ignored; a legacy `settingsScope` key is ignored and stripped by the
+  next user-layer save (both are stripped by `valuesToFull`).
+- **Project layer** `.zvec-grep/config.json` (cwd-anchored, no walk-up) —
+  self-contained values PLUS the boolean activation flag `projectScope`
+  (true = this file is the source of truth for this workspace, false =
+  values stored but dormant). Files the menu manages always carry the
+  flag, so a committed file declares its state. A legacy
+  `settingsScope: "project"` string in an old file is honoured as true
+  (read-only; never written).
+- **Resolution** (per workspace, per tool call):
+  - file exists && flag true (or legacy string) → file alone is
+    authoritative for THIS workspace: built-in defaults + its contents,
+    user values never mixed in, missing fields → built-in defaults.
+  - otherwise (no file, flag false/absent/non-boolean, malformed file) →
+    user file over built-in defaults; the project file's values stay
+    **dormant**.
+- **Menu** (`/zg settings`): the first item is the per-workspace scope, with
+  a third display state `user (project file dormant)` when a (flag-false or
+  keyless) file exists. Picking `project` saves the file with
+  `projectScope: true` plus the values (creates if missing →
+  `Config created at …`), and a dormant file's parked values win over the
+  local user values (`loadProjectFileValues`) — activating a team file must
+  not overwrite it. Picking `user` calls `deactivateProjectScope` — flag
+  written false, stored values kept dormant, legacy string key dropped,
+  file never deleted, user values apply immediately.
+- **Files:** `config.ts` — `ZvecGrepSettings.projectScope: boolean`
+  (effective flag; the string-enum `ConfigScope` is gone; `saveSettings`
+  takes a plain `'user' | 'project'`); `loadSettings` resolves per
+  workspace from the project file's flag (legacy string honoured);
+  `saveSettings` user branch writes values only (legacy strip); project
+  branch writes values + boolean flag; `deactivateProjectScope` flips the
+  flag false (normalizes a legacy key); new `loadProjectFileValues`.
+  `settings-ui.ts` — scope item `id: 'projectScope'`, display refresh,
+  scope-vs-value save split, dormant-value preservation on activation.
+  `tools.ts` — comment only.
+- **Tests** (`verify-settings.mjs`, rewritten): flag false / keyless legacy
+  / non-boolean flag / malformed file → user layer wins (file 25, user 10 →
+  10, values dormant); flag true → file wins with built-in fallback for
+  missing fields (user autoIndex `true` does not leak in); per-workspace
+  independence (flag in `proj` does not touch `other` or no-cwd); legacy
+  `settingsScope: "project"` string activates (read-only); user-file scope
+  keys (both legacy and stray boolean) ignored + stripped; deactivation
+  writes FALSE not a delete (values kept, legacy key dropped,
+  already-false → no-op, no-file → no-op); `loadProjectFileValues`
+  (dormant values readable, no file → built-ins); tool wiring: flag true
+  (21) beats user (11), explicit limit still wins, deactivate → 11,
+  file deleted → 11.
+- **Migration notes:**
+  - existing delta-style / keyless project files → dormant until the flag is
+    added (menu: pick `project`, or hand-edit `"projectScope": true`). No
+    crash, no silent change.
+  - project files with the earlier string key: `settingsScope: "project"`
+    activates exactly as before (read-only compat); deactivation rewrites
+    them to the boolean form.
+  - user files with `settingsScope` — the key is a no-op immediately; next
+    user-layer save strips it. A prior global `"project"` preference is
+    lost: each such workspace needs its own project file with the flag.
+- **Gotcha (README):** repos commonly ignore the whole `.zvec-grep/` dir
+  (index artifacts) — and git cannot track files inside an ignored
+  *directory*, so the config needs an explicit re-include to ship (`.zvec-grep/*`
+  + `!.zvec-grep/config.json`). The committed file activates project scope
+  for every machine that pulls it — the intended team-wide mechanism.
+- All 6 suites green; committed locally. **Not released — no version bump,
+  no tag, no publish** (explicit decision; bump to 0.4.0 when shipping).
+- Deliberately diverges from pi-shepherd's delta model (same latent issues);
+  mirror there later if parity is wanted.
+
+### Previous unreleased intermediate state (kept for the record)
+
+Between the decisions there were two intermediate local states, each
+superseded within the same session (nothing was pushed):
+
+1. "Self-contained file + `settingsScope` pointer in the USER file"
+   (delta gone, but activation still a machine-global switch) — the
+   never-pushed commit that started this section.
+2. "Per-workspace activation with a STRING key"
+   (`settingsScope: "project"` inside the project file; deactivation
+   deleted the key) — commit `38f3311`, superseded by the boolean-refactor
+   commit. If that exact state is ever needed, `git show 38f3311`.
+
 ## Publishing state (as of v0.3.0, 2026-09-03)
 
 Live on npm (`latest` tag): **0.3.0** (12 files, provenance signed from

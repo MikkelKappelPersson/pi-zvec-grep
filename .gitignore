@@ -11,5 +11,6 @@ node_modules/
 *.log
 
 # zg runtime artifacts (indexes live in <workspace>/.zvec-grep, not here)
-# (the project config .zvec-grep/config.json lives there too — local-only, like pi-shepherd's)
+# (the self-contained project config .zvec-grep/config.json is meant to be
+# committed; re-include it in consuming repos: `.zvec-grep/*` + `!.zvec-grep/config.json`)
 .zvec-grep/

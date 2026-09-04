@@ -184,8 +184,9 @@ export function registerZvecTools(pi: ExtensionAPI): void {
 		],
 		parameters: searchParams,
 		async execute(_toolCallId: string, params: SearchToolInput, signal: AbortSignal | undefined, _onUpdate: unknown, ctx: ExtensionContext) {
-			// Effective limit: explicit tool-call param wins; otherwise the scoped
-			// config default (user file / project delta); hard cap 50.
+			// Effective limit: explicit tool-call param wins; otherwise the
+			// per-workspace config default (the project file when its
+			// projectScope flag is true, else the user file); hard cap 50.
 			const defaultLimit = Math.min(Math.max(Math.round(loadSettings(ctx.cwd).defaultLimit), 1), MAX_SEARCH_LIMIT);
 			const args = buildQueryArgs(params, {
 				limit: params.limit !== undefined ? Math.min(Math.max(Math.round(params.limit), 1), MAX_SEARCH_LIMIT) : defaultLimit,
